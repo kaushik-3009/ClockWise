@@ -1,0 +1,66 @@
+import type { Config } from 'tailwindcss';
+
+export default {
+  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        brand: 'var(--color-brand)',
+        'brand-hover': 'var(--color-brand-hover)',
+        'brand-light': 'var(--color-brand-light)',
+        'brand-alpha': 'var(--color-brand-alpha)',
+        'bg-primary': 'var(--bg-primary)',
+        'bg-secondary': 'var(--bg-secondary)',
+        'bg-tertiary': 'var(--bg-tertiary)',
+        'bg-card': 'var(--bg-card)',
+        'bg-sidebar': 'var(--bg-sidebar)',
+        'border-base': 'var(--border-color)',
+        'border-strong': 'var(--border-strong)',
+        'text-base': 'var(--text-primary)',
+        'text-sub': 'var(--text-secondary)',
+        'text-muted': 'var(--text-muted)',
+        'text-inverse': 'var(--text-inverse)',
+        success: 'var(--color-success)',
+        'success-light': '#1A3A1A',
+        warning: 'var(--color-warning)',
+        error: 'var(--color-error)',
+        'error-hover': '#C0392B',
+        'error-light': '#3A1A1A',
+      },
+      fontFamily: {
+        display: ['"Barlow Condensed"', 'sans-serif'],
+        sans: ['Manrope', 'system-ui', 'sans-serif'],
+        mono: ['"DM Mono"', 'monospace'],
+      },
+      fontSize: {
+        timer: ['120px', { lineHeight: '1', letterSpacing: '-0.02em' }],
+        'timer-sm': ['80px', { lineHeight: '1', letterSpacing: '-0.02em' }],
+        'timer-hms': ['56px', { lineHeight: '1', letterSpacing: '0' }],
+        '2xs': ['10px', { lineHeight: '1.4' }],
+        xs: ['12px', { lineHeight: '1.5' }],
+        sm: ['13px', { lineHeight: '1.5' }],
+        base: ['14px', { lineHeight: '1.6' }],
+        md: ['16px', { lineHeight: '1.5' }],
+        lg: ['18px', { lineHeight: '1.4' }],
+        xl: ['20px', { lineHeight: '1.3' }],
+        '2xl': ['24px', { lineHeight: '1.2' }],
+        '3xl': ['32px', { lineHeight: '1.1' }],
+      },
+      borderRadius: {
+        sm: 'var(--radius-sm)',
+        md: 'var(--radius-md)',
+        lg: 'var(--radius-lg)',
+        pill: 'var(--radius-pill)',
+      },
+      transitionDuration: {
+        fast: '150ms',
+        base: '200ms',
+        slow: '300ms',
+      },
+      gridTemplateColumns: {
+        '20': 'repeat(20, minmax(0, 1fr))',
+      },
+    },
+  },
+  plugins: [],
+} satisfies Config;

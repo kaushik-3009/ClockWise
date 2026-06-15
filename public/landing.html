@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#E8521A" />
+    <meta name="description" content="A minimal Pomodoro focus timer with project tracking and analytics." />
+    <title>ClockWise — Pomodoro Timer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;1,700;1,900&family=DM+Mono:wght@500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      :root {
+        --bg: #ffffff;
+        --bg-alt: #f7f7f7;
+        --bg-card: #ffffff;
+        --border: #eeeeee;
+        --text: #0a0a0a;
+        --text-sub: #888888;
+        --text-muted: #bbbbbb;
+        --brand: #E8521A;
+        --brand-hover: #D44716;
+        --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+        --shadow-lg: 0 4px 24px rgba(0,0,0,0.08);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #0a0a0a;
+          --bg-alt: #111111;
+          --bg-card: #161616;
+          --border: #222222;
+          --text: #f5f5f5;
+          --text-sub: #888888;
+          --text-muted: #444444;
+          --shadow: none;
+          --shadow-lg: none;
+        }
+      }
+
+      [data-theme="dark"] {
+        --bg: #0a0a0a;
+        --bg-alt: #111111;
+        --bg-card: #161616;
+        --border: #222222;
+        --text: #f5f5f5;
+        --text-sub: #888888;
+        --text-muted: #444444;
+        --shadow: none;
+        --shadow-lg: none;
+      }
+
+      html { scroll-behavior: smooth; }
+
+      body {
+        font-family: 'Manrope', system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ── Nav ────────────────────────────── */
+      nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 32px;
+        height: 64px;
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
+        backdrop-filter: blur(12px);
+      }
+      .nav-logo {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-weight: 900;
+        font-style: italic;
+        font-size: 24px;
+        color: var(--brand);
+        text-decoration: none;
+        letter-spacing: -0.02em;
+      }
+      .nav-links { display: flex; gap: 32px; align-items: center; }
+      .nav-links a {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-sub);
+        text-decoration: none;
+        transition: color 0.15s;
+      }
+      .nav-links a:hover { color: var(--text); }
+      .nav-cta {
+        background: var(--brand) !important;
+        color: #fff !important;
+        padding: 8px 20px;
+        border-radius: 8px;
+        font-weight: 600 !important;
+        transition: background 0.15s;
+      }
+      .nav-cta:hover { background: var(--brand-hover) !important; }
+
+      @media (max-width: 640px) {
+        nav { padding: 0 16px; }
+        .nav-links { gap: 16px; }
+        .nav-links a:not(.nav-cta) { display: none; }
+      }
+
+      /* ── Hero ───────────────────────────── */
+      .hero {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 120px 24px 80px;
+        text-align: center;
+      }
+      .hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-sub);
+        margin-bottom: 32px;
+        letter-spacing: 0.04em;
+      }
+      .hero-badge span { color: var(--brand); }
+      .hero h1 {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-weight: 900;
+        font-style: italic;
+        font-size: clamp(64px, 12vw, 140px);
+        line-height: 0.9;
+        letter-spacing: -0.03em;
+        margin-bottom: 24px;
+      }
+      .hero h1 em {
+        font-style: normal;
+        color: var(--brand);
+      }
+      .hero p {
+        max-width: 480px;
+        font-size: 16px;
+        color: var(--text-sub);
+        line-height: 1.7;
+        margin-bottom: 40px;
+      }
+      .hero-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .btn-primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 14px 28px;
+        background: var(--brand);
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        font-family: 'Manrope', sans-serif;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s;
+        text-decoration: none;
+      }
+      .btn-primary:hover { background: var(--brand-hover); }
+      .btn-secondary {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 14px 28px;
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        font-family: 'Manrope', sans-serif;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: border-color 0.15s, background 0.15s;
+        text-decoration: none;
+      }
+      .btn-secondary:hover { border-color: var(--text-muted); background: var(--bg-alt); }
+
+      /* ── Timer Mock ─────────────────────── */
+      .timer-mock {
+        margin-top: 64px;
+        padding: 48px 64px;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        box-shadow: var(--shadow-lg);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+      }
+      .timer-mock-label {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        color: var(--brand);
+      }
+      .timer-mock-digits {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-weight: 900;
+        font-style: italic;
+        font-size: clamp(56px, 10vw, 120px);
+        line-height: 1;
+        letter-spacing: -0.02em;
+        font-variant-numeric: tabular-nums;
+      }
+      .timer-mock-digits .colon { color: var(--brand); }
+      .timer-mock-phase {
+        display: inline-flex;
+        padding: 4px 12px;
+        border-radius: 999px;
+        background: var(--brand);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .timer-mock-controls {
+        display: flex;
+        gap: 12px;
+        margin-top: 8px;
+      }
+      .timer-mock-controls span {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-sub);
+        font-size: 14px;
+      }
+
+      /* ── Features ───────────────────────── */
+      .features {
+        padding: 120px 24px;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      .features-header {
+        text-align: center;
+        margin-bottom: 72px;
+      }
+      .features-header h2 {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-weight: 700;
+        font-size: clamp(32px, 5vw, 48px);
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+        margin-bottom: 16px;
+      }
+      .features-header p {
+        max-width: 520px;
+        margin: 0 auto;
+        color: var(--text-sub);
+        font-size: 15px;
+      }
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1px;
+        background: var(--border);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        overflow: hidden;
+      }
+      @media (max-width: 768px) {
+        .features-grid { grid-template-columns: 1fr; }
+      }
+      .feature-card {
+        padding: 40px 32px;
+        background: var(--bg-card);
+      }
+      .feature-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        background: var(--bg-alt);
+        border: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 20px;
+        font-size: 18px;
+      }
+      .feature-card h3 {
+        font-size: 15px;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      .feature-card p {
+        font-size: 13px;
+        color: var(--text-sub);
+        line-height: 1.6;
+      }
+
+      /* ── Stats Preview ──────────────────── */
+      .stats-section {
+        padding: 120px 24px;
+        background: var(--bg-alt);
+      }
+      .stats-inner {
+        max-width: 1200px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 80px;
+        align-items: center;
+      }
+      @media (max-width: 768px) {
+        .stats-inner { grid-template-columns: 1fr; gap: 48px; }
+      }
+      .stats-text h2 {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-weight: 700;
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+        margin-bottom: 16px;
+      }
+      .stats-text p {
+        color: var(--text-sub);
+        font-size: 15px;
+        margin-bottom: 32px;
+        max-width: 420px;
+      }
+      .stats-cards {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1px;
+        background: var(--border);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        overflow: hidden;
+      }
+      .stat-card {
+        padding: 28px 24px;
+        background: var(--bg-card);
+      }
+      .stat-card-label {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-muted);
+        margin-bottom: 4px;
+      }
+      .stat-card-value {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-weight: 700;
+        font-size: 36px;
+        line-height: 1;
+      }
+      .stat-card-delta {
+        font-size: 11px;
+        font-weight: 600;
+        color: #27ae60;
+        margin-top: 4px;
+      }
+
+      /* ── Heatmap Mock ───────────────────── */
+      .heatmap-mock {
+        display: grid;
+        grid-template-columns: repeat(20, 1fr);
+        gap: 3px;
+        margin-top: 32px;
+        max-width: 400px;
+      }
+      .heatmap-cell {
+        aspect-ratio: 1;
+        border-radius: 3px;
+        background: var(--border);
+      }
+      .heatmap-cell.l1 { background: rgba(232,82,26,0.25); }
+      .heatmap-cell.l2 { background: rgba(232,82,26,0.45); }
+      .heatmap-cell.l3 { background: rgba(232,82,26,0.7); }
+      .heatmap-cell.l4 { background: var(--brand); }
+
+      /* ── CTA ────────────────────────────── */
+      .cta {
+        padding: 120px 24px;
+        text-align: center;
+      }
+      .cta h2 {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-weight: 900;
+        font-style: italic;
+        font-size: clamp(40px, 8vw, 80px);
+        line-height: 0.95;
+        letter-spacing: -0.03em;
+        margin-bottom: 24px;
+      }
+      .cta p {
+        color: var(--text-sub);
+        font-size: 16px;
+        margin-bottom: 40px;
+        max-width: 440px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      /* ── Footer ─────────────────────────── */
+      footer {
+        padding: 32px 24px;
+        border-top: 1px solid var(--border);
+        text-align: center;
+        font-size: 13px;
+        color: var(--text-muted);
+      }
+      footer a {
+        color: var(--text-sub);
+        text-decoration: none;
+      }
+      footer a:hover { color: var(--text); }
+
+      /* ── Theme Toggle ───────────────────── */
+      .theme-toggle {
+        background: none;
+        border: 1px solid var(--border);
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-sub);
+        font-size: 16px;
+        transition: border-color 0.15s;
+      }
+      .theme-toggle:hover { border-color: var(--text-muted); }
+
+      /* ── Reduced motion ─────────────────── */
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Nav -->
+    <nav>
+      <a href="/" class="nav-logo">ClockWise</a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#stats">Analytics</a>
+        <a href="/" class="nav-cta">Open App</a>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+          <span id="theme-icon">&#9790;</span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="hero-badge"><span>&#9679;</span> Open source &middot; No account required</div>
+      <h1>Clock<br><em>Wise</em></h1>
+      <p>A minimal Pomodoro timer with project tracking and analytics. No sign-up, no cloud, no distractions. Your data stays in your browser.</p>
+      <div class="hero-actions">
+        <a href="/" class="btn-primary">Start Focusing &rarr;</a>
+        <a href="#features" class="btn-secondary">See Features</a>
+      </div>
+
+      <!-- Timer Mock -->
+      <div class="timer-mock">
+        <span class="timer-mock-label">Focus Time</span>
+        <div class="timer-mock-digits">24<span class="colon">:</span>59</div>
+        <span class="timer-mock-phase">Phase 1 of 8</span>
+        <div class="timer-mock-controls">
+          <span>&#9654;</span>
+          <span>&#8634;</span>
+          <span>&#9194;</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="features" id="features">
+      <div class="features-header">
+        <h2>Everything you need.<br>Nothing you don't.</h2>
+        <p>Built for people who want to focus, not manage software.</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">&#9202;</div>
+          <h3>Pomodoro Timer</h3>
+          <p>Configurable focus and break phases. Digital, analog, and clock display modes. Keyboard shortcuts for everything.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#9776;</div>
+          <h3>Project Tracking</h3>
+          <p>Organize work into color-coded projects with tasks. Every second is automatically logged to the right project.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#9733;</div>
+          <h3>Templates</h3>
+          <p>Save timer configurations as templates. Switch between Classic Pomodoro, Deep Work, Quick Sprint, and more.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#9729;</div>
+          <h3>Ambient Sounds</h3>
+          <p>Rain, white noise, brown noise, and cafe background audio. Generated via Web Audio API &mdash; no downloads.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#9783;</div>
+          <h3>Analytics Dashboard</h3>
+          <p>Heatmaps, trend charts, session breakdowns, streak tracking, and weekly goals. See where your time goes.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#9889;</div>
+          <h3>Offline PWA</h3>
+          <p>Installable on desktop and mobile. Works entirely offline. All data stored locally in your browser.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stats Preview -->
+    <section class="stats-section" id="stats">
+      <div class="stats-inner">
+        <div class="stats-text">
+          <h2>See where your<br>time actually goes.</h2>
+          <p>Daily heatmaps, trend lines, project breakdowns, and streak tracking. No guessing &mdash; just data.</p>
+          <a href="/" class="btn-primary">View Your Stats &rarr;</a>
+        </div>
+        <div>
+          <div class="stats-cards">
+            <div class="stat-card">
+              <div class="stat-card-label">Today</div>
+              <div class="stat-card-value">2h 14m</div>
+              <div class="stat-card-delta">+18% vs avg</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-label">This Week</div>
+              <div class="stat-card-value">14h 32m</div>
+              <div class="stat-card-delta">+7% vs last week</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-label">Sessions</div>
+              <div class="stat-card-value">18</div>
+              <div class="stat-card-delta">94% completed</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-label">Streak</div>
+              <div class="stat-card-value">12 days</div>
+              <div class="stat-card-delta">Personal best!</div>
+            </div>
+          </div>
+          <div class="heatmap-mock" id="heatmap"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta">
+      <h2>Stop planning.<br><em>Start doing.</em></h2>
+      <p>No sign-up. No downloads. Open the page and start your first focus session right now.</p>
+      <a href="/" class="btn-primary">Open ClockWise &rarr;</a>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <p>ClockWise &middot; <a href="https://github.com">GitHub</a> &middot; Built with React, TypeScript &amp; Dexie.js</p>
+    </footer>
+
+    <script>
+      // Theme toggle — explicit data-theme overrides system preference
+      function setTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        document.getElementById('theme-icon').innerHTML = theme === 'dark' ? '&#9788;' : '&#9790;';
+        localStorage.setItem('theme', theme);
+      }
+
+      function toggleTheme() {
+        const current = document.documentElement.getAttribute('data-theme');
+        // If no explicit theme set, check system preference
+        if (!current) {
+          const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          setTheme(systemDark ? 'light' : 'dark');
+        } else {
+          setTheme(current === 'dark' ? 'light' : 'dark');
+        }
+      }
+
+      // Restore saved theme, or set light as default
+      const saved = localStorage.getItem('theme');
+      if (saved) {
+        setTheme(saved);
+      } else {
+        setTheme('light');
+      }
+
+      // Generate heatmap
+      const heatmap = document.getElementById('heatmap');
+      const levels = ['', 'l1', 'l2', 'l3', 'l4'];
+      for (let i = 0; i < 140; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'heatmap-cell';
+        // Create a realistic pattern: more activity in the middle, less at edges
+        const row = Math.floor(i / 20);
+        const col = i % 20;
+        const centerDist = Math.abs(row - 3.5) + Math.abs(col - 10);
+        const chance = Math.max(0, 1 - centerDist * 0.08);
+        const rand = Math.random();
+        if (rand < chance * 0.3) cell.classList.add('l4');
+        else if (rand < chance * 0.5) cell.classList.add('l3');
+        else if (rand < chance * 0.7) cell.classList.add('l2');
+        else if (rand < chance * 0.9) cell.classList.add('l1');
+        heatmap.appendChild(cell);
+      }
+    </script>
+  </body>
+</html>
