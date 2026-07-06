@@ -28,7 +28,7 @@ export function BottomNav() {
 
   const handleLogout = async () => {
     await logOut();
-    navigate('/login');
+    navigate('/');
   };
 
   return (

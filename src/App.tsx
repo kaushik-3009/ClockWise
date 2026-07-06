@@ -69,8 +69,6 @@ function AuthAwareLanding() {
     );
   }
   if (user) return <Navigate to="/timer" replace />;
-  const hasVisited = localStorage.getItem('clockwise-ui');
-  if (hasVisited) return <Navigate to="/login" replace />;
   return <LandingPage />;
 }
 

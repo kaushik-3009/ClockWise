@@ -139,7 +139,6 @@ src/
   pages/          Timer, Login, Signup, Statistics, Projects, ProjectDetail, Tasks, History, Streaks, Insights, Templates
 public/
   sounds/         Ambient audio files (rain, white noise, brown noise, cafe — see sounds/README.md)
-  landing.html    Product landing page
 .github/
   workflows/      CI pipeline
 ```
