@@ -1,141 +1,82 @@
-<div align="center">
-
 # ClockWise
 
-**A Pomodoro timer with project tracking, analytics, and cross-device sync.**
-
-Sign in, focus, and see exactly where your time goes — from any device.
+A Pomodoro timer that tracks where your focus time actually goes, synced across devices.
 
 [![CI](https://github.com/kaushik-3009/ClockWise/actions/workflows/ci.yml/badge.svg)](https://github.com/kaushik-3009/ClockWise/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue.svg)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-</div>
+## Why
 
----
+Most Pomodoro apps are timers with a bell attached. ClockWise treats every session as data: pick a project or task, start the timer, and the session gets logged automatically — no manual entry, no end-of-day guessing. Over weeks, that turns into heatmaps, streaks, and trend charts that answer "where did my time actually go this week?"
 
-## What it does
+It started as a local-only IndexedDB app, then moved to Firebase (Auth + Firestore) so the same data follows you across devices and survives a wiped browser, while still working offline.
 
-ClockWise is a Pomodoro focus timer that automatically tracks where your time goes. Pick a project (or task), start the timer, and every second is logged — no manual entry. Over time, heatmaps, trend charts, and streak tracking show you exactly how you spend your focus hours. Data syncs across devices via Firebase and is fully usable offline.
+## Features
 
-**Key features:**
-
-- **Pomodoro timer** with configurable focus/break phases, three display modes (digital, analog, clock), and keyboard shortcuts (Space, R, S, Esc)
-- **Project & task tracking** — organize work into color-coded projects, assign tasks, or create either inline from the "I'm focusing on…" picker without leaving the timer
-- **Quick context switch mid-session** — reassign the running timer to a different project/task without pausing or losing progress
-- **Analytics dashboard** — heatmaps, trend charts, session breakdowns, weekday/time-of-day analysis
-- **Ambient sounds** — rain, white noise, brown noise, cafe — real looping audio files, with a shared Web Audio context for UI sound effects
-- **Templates** — save and switch timer configurations (Classic Pomodoro, Deep Work, Quick Sprint)
-- **Streak tracking** — daily goals, streak counting, consistency scoring
-- **Accounts + cross-device sync** — Firebase Authentication (email/password, password reset) with per-user Firestore data
-- **Offline-first** — Firestore persistent local cache with multi-tab support, plus an offline banner when the network drops; installable PWA
-- **Data export** — JSON and CSV export with auto-backup
-- **Responsive layout** — scales up through custom `3xl`/`4xl` Tailwind breakpoints for large and ultra-wide monitors
-- **Dark mode** — full theme support via CSS custom properties, themed scrollbars
-
----
-
-## Routing & auth flow
-
-| Route | Who sees it | Behavior |
-|---|---|---|
-| `/` | Everyone | Landing page for signed-out users; signed-in users are redirected straight to `/timer` |
-| `/login`, `/signup` | Signed-out users | Signed-in users are redirected to `/timer` |
-| `/timer`, `/statistics`, `/projects`, … | Signed-in users only | `ProtectedRoute` redirects signed-out users back to `/` |
-
-Every CTA on the landing page ("Start Focusing", "Open App", "View Your Stats") routes through `/login` rather than assuming an active session — clicking through as a signed-out visitor lands on the login screen, and a successful login drops you into `/timer`. Logging out sends you back to `/`, not a dead end.
-
----
+- **Timer** — configurable focus/break phases, three display modes (digital, analog, clock), keyboard shortcuts (Space, R, S, Esc)
+- **Projects & tasks** — color-coded projects with tasks, creatable inline from the "I'm focusing on…" picker without leaving the timer; switch context mid-session without losing progress
+- **Analytics** — heatmaps, trend charts, session breakdowns, weekday/time-of-day analysis
+- **Streaks** — daily goals, streak counting, consistency scoring
+- **Templates** — saved timer configurations (Classic Pomodoro, Deep Work, Quick Sprint)
+- **Ambient sound** — looping audio (rain, white noise, brown noise, cafe) alongside synthesized UI sound effects
+- **Accounts & sync** — Firebase email/password auth with per-user Firestore data, offline persistence, installable PWA
+- **Export** — JSON and CSV, with automatic backup snapshots
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  React 18 + TypeScript (strict) + React Router          │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐             │
-│  │  Timer   │   │ Projects │   │ Insights │  ...pages   │
-│  └────┬─────┘   └────┬─────┘   └────┬─────┘             │
-│       │              │              │                   │
-│  ┌────┴──────────────┴──────────────┴────┐              │
-│  │           Zustand Stores              │              │
-│  │   timerStore (not persisted)          │              │
-│  │   uiStore (persisted to localStorage) │              │
-│  └───────────────────┬───────────────────┘              │
-│                      │                                  │
-│  ┌───────────────────┴───────────────────┐              │
-│  │         Web Worker (timer.worker)     │              │
-│  │   setInterval → postMessage('tick')   │              │
-│  └───────────────────────────────────────┘              │
-│                                                          │
-│  ┌────────────────────────────────────────┐             │
-│  │      Firebase Auth + Firestore         │             │
-│  │  users/{uid}/{projects,tasks,sessions, │             │
-│  │   streaks,settings,templates,backups}  │             │
-│  │  persistentLocalCache (offline, multi- │             │
-│  │  tab) via initializeFirestore          │             │
-│  └────────────────────────────────────────┘             │
-└─────────────────────────────────────────────────────────┘
+React 18 + TypeScript (strict) + React Router
+        │
+Zustand stores ── timerStore (in-memory) · uiStore (localStorage)
+        │
+Web Worker (timer.worker.ts) — owns the tick, main thread just renders
+        │
+Firebase Auth + Firestore
+  users/{uid}/{projects, tasks, sessions, streaks, settings, templates, backups}
+  initializeFirestore + persistentLocalCache — offline reads/writes, multi-tab safe
 ```
 
-**Technical choices:**
+**Routing:** `/` is the landing page for signed-out visitors and redirects signed-in users to `/timer`. Every landing CTA routes through `/login` rather than assuming a session, so a signed-out click always lands somewhere real instead of silently bouncing. `ProtectedRoute` sends signed-out users hitting an app route back to `/`.
 
-| Decision | Why |
-|---|---|
-| Web Worker for timer | `setInterval` on the main thread drifts when the tab is throttled. The worker keeps ticking accurately. |
-| Firestore over a custom backend | Per-user subcollections give free auth-scoped security rules, live `onSnapshot` sync, and offline persistence out of the box. |
-| `initializeFirestore` + `persistentLocalCache` | Firestore's default cache doesn't survive across tabs. `persistentMultipleTabManager` keeps writes consistent when the app is open in more than one tab. |
-| Generation-counter cancellation in `useTimer` | A plain boolean `cancelledRef` can't distinguish "this reset cancelled effect run #1" from "a new run #2 already started" — a monotonically increasing generation counter can. Prevents orphaned session documents on rapid reset→play→reset. |
-| Zustand over Context | Timer ticks 60 times/minute. Zustand's selector pattern (`useStore(s => s.field)`) prevents unnecessary re-renders on every tick. |
-| CSS variables over Tailwind `dark:` | CSS variables override cleanly via `[data-theme="dark"]`. Tailwind's variant doesn't compose well with dynamic themes. |
-| Real audio files for ambient sound, Web Audio API for effects | Looping ambient tracks (rain, cafe, etc.) sound better as authored audio than synthesized noise; short UI sounds (click, chime) stay synthesized and share one `AudioContext`. |
-| Recharts with custom tooltips | Default Recharts tooltip text inherits bar fill color, making light bars invisible in light mode. Custom HTML tooltips fix this. |
+**Notable decisions:**
 
----
+- **Timer runs in a Web Worker**, not `setInterval` on the main thread — background-tab throttling can't make it drift, and heavy chart re-renders can't stall it.
+- **Firestore over a custom backend** — per-user subcollections get auth-scoped security rules and live sync for free; `persistentMultipleTabManager` keeps offline writes consistent across tabs.
+- **Generation counter instead of a boolean cancel flag** in `useTimer` — a plain `cancelledRef` can't tell "this run was cancelled" from "a newer run already replaced it," which let rapid reset→play→reset leave orphaned session documents in Firestore. A monotonically increasing counter fixes that.
+- **Zustand with selectors, not Context** — the timer ticks every second; selecting individual fields (`useStore(s => s.field)`) keeps components that don't care about the tick from re-rendering.
+- **Real audio files for ambient loops, synthesized Web Audio for UI sounds** — looping rain/cafe/noise sounds better as authored audio; short one-shot clicks/chimes stay synthesized through a single shared `AudioContext` so they don't need their own audio files.
+- **Recharts with custom HTML tooltips** — Recharts' default tooltip text inherits the bar's fill color, which makes it invisible in light mode; custom tooltip components sidestep it. Same reason CSS variables don't drive chart colors directly (they don't resolve inside inline SVG) — chart components detect the theme in JS and use hex fallbacks.
+- **Hand-written type guards for import validation**, no schema library — every field of every entity is checked for type, range, and enum membership.
 
-## Quick start
+## Running it
 
 ```bash
-# Clone
 git clone https://github.com/kaushik-3009/ClockWise.git
 cd ClockWise
-
-# Install
 npm install
 
-# Configure Firebase — copy and fill in your project's config
-cp .env.example .env.local
+cp .env.example .env.local   # fill in your Firebase project config
 
-# Develop
-npm run dev
-
-# Build
-npm run build
-
-# Test
-npm test
+npm run dev      # start dev server
+npm run build    # type-check + production build
+npm test         # run tests
 ```
 
----
-
-## Scripts
-
-| Command | What it does |
+| Command | Does |
 |---|---|
-| `npm run dev` | Start Vite dev server |
+| `npm run dev` | Vite dev server |
 | `npm run build` | Type-check + production build |
-| `npm test` | Run all tests (Vitest) |
+| `npm test` | Run tests (Vitest) |
 | `npm run lint` | ESLint on `src/` |
-| `npm run format` | Prettier on `src/` |
 | `npx tsc --noEmit` | Type-check only |
-
----
 
 ## Project structure
 
 ```
 src/
   components/
-    ui/           Modal, Toast, ConfirmDialog, SettingsModal, Skeleton, ErrorBoundary
+    ui/           Modal, Toast, ConfirmDialog, SettingsModal, ErrorBoundary
     layout/       AppShell, Sidebar, BottomNav, OfflineBanner
     auth/         ProtectedRoute
     timer/        TimerDisplay, TimerControls, PhaseBadge, FocusingOnBar, TaskPicker, TemplateSelector
@@ -143,92 +84,30 @@ src/
     stats/        HeatmapCalendar, FocusTimeChart, SessionsChart, TrendChart, StatCard
     insights/     DaytimeChart, WeekdayChart, FocusDistribution
   hooks/          useTimer, useProjects, useTasks, useSessions, useSettings, useTemplates, useOnlineStatus
-  stores/         timerStore (Zustand), uiStore (Zustand + persist)
-  db/             queries/ (Firestore reads/writes per collection), seed.ts
-  workers/        timer.worker.ts (Web Worker)
-  lib/            firebase.ts, auth.tsx, time.ts, phases.ts, stats.ts, sounds.ts, ambient.ts, streaks.ts, exportImport.ts
-  types/          index.ts (canonical types)
+  stores/         timerStore, uiStore (Zustand)
+  db/queries/     Firestore reads/writes, one file per collection
+  workers/        timer.worker.ts
+  lib/            firebase.ts, auth.tsx, stats.ts, sounds.ts, ambient.ts, streaks.ts, exportImport.ts
   pages/          Timer, Login, Signup, Statistics, Projects, ProjectDetail, Tasks, History, Streaks, Insights, Templates
-public/
-  sounds/         Ambient audio files (rain, white noise, brown noise, cafe — see sounds/README.md)
-.github/
-  workflows/      CI pipeline
+public/sounds/    Ambient audio files
 ```
-
----
 
 ## Testing
 
 ```bash
-npm test            # Run all tests
-npm run test:watch  # Watch mode
+npm test            # run once
+npm run test:watch  # watch mode
 ```
 
-**Coverage:**
+50 tests across 6 files: `time.ts`, `phases.ts`, `stats.ts`, `streaks.ts`, `exportImport.ts`, `timerStore.ts`.
 
-- Unit tests: `time.ts`, `phases.ts`, `stats.ts`, `streaks.ts`, `exportImport.ts`
-- Store tests: `timerStore.ts`
-- 50 tests across 6 test files
+## Data & sync
 
----
+Everything lives under `users/{uid}/` in Firestore — private by default, available on any device you sign into. Firestore's persistent local cache means the app keeps working offline; writes queue and sync once you're back (an offline banner tells you when). Auto-backup snapshots on every session completion, plus manual JSON/CSV export.
 
-## Data storage & sync
+## CI
 
-Data lives in Firestore under a per-user subcollection tree (`users/{uid}/...`), so it's private by default and available on any device you sign into.
-
-```
-Firestore (users/{uid}/)
-├── projects, tasks, sessions, streaks
-├── settings, templates
-└── backups (auto-backup snapshots)
-
-Local (per browser)
-├── Firestore persistentLocalCache — offline reads/writes, synced when back online
-└── localStorage — uiStore (theme, sidebar state)
-```
-
-- Firestore's persistent local cache means the app keeps working offline; writes queue and sync once you're back online (surfaced via the offline banner)
-- Auto-backup saves a full snapshot on every session completion
-- Export to JSON or CSV at any time
-
----
-
-## Technical highlights
-
-**Web Worker timer with drift compensation**
-The timer runs in a Web Worker using `setInterval`. The worker sends `'tick'` messages to the main thread, which updates the Zustand store. This keeps the timer accurate even when the tab is throttled (browsers throttle `setInterval` on background tabs to save battery).
-
-**Firestore offline persistence**
-`initializeFirestore` is configured with `persistentLocalCache({ tabManager: persistentMultipleTabManager() })` so reads/writes work offline and stay consistent if the app is open in multiple tabs. An `useOnlineStatus` hook + `OfflineBanner` component surface connectivity state to the user.
-
-**Race-safe session lifecycle**
-Session documents are created in Firestore when a phase starts running. A monotonically increasing generation counter (rather than a single boolean flag) tracks which effect run is "current," so a fast reset → play → reset sequence can't leave an orphaned session document behind or apply a stale session ID.
-
-**CSS variables in SVG**
-Recharts renders inline SVG. CSS custom properties (`var(--color-brand)`) don't resolve inside SVG elements. The chart components detect the current theme via JavaScript and apply hex colors directly to SVG attributes.
-
-**Ambient sound + effects split**
-Looping ambient tracks (rain, white noise, brown noise, cafe) play as real audio files via `HTMLAudioElement`, swapped without an audible gap when only the volume changes. Short UI sound effects (click, chime, warning) stay synthesized via a shared `AudioContext` so there's no duplicate audio-file overhead for one-shot sounds.
-
-**Import validation without Zod**
-Data imports are validated with TypeScript type guards. Every field of every entity type is checked for correct type, range, and enum membership. Hex color format is validated with regex. No schema library dependency.
-
-**Incremental stats computation**
-Statistics are computed in `lib/stats.ts` as pure functions. Sessions are grouped by day into a `Map<string, Session[]>` index, then all derived stats (totals, deltas, best day, consistency) are computed from that index. Memoized via `useMemo` in page components.
-
----
-
-## CI/CD
-
-GitHub Actions runs on every push and PR:
-
-```
-TypeScript → ESLint → Vitest → Vite build
-```
-
-All four must pass. The pipeline is defined in `.github/workflows/ci.yml`.
-
----
+GitHub Actions runs TypeScript → ESLint → Vitest → Vite build on every push and PR. All four must pass (`.github/workflows/ci.yml`).
 
 ## License
 
