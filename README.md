@@ -83,34 +83,7 @@ npm run dev                  # start the dev server at localhost:5173
 
 ## Architecture
 
-```
-┌──────────────────────────────────────────────────────────┐
-│  React 18 + TypeScript (strict) + React Router           │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐              │
-│  │  Timer   │   │ Projects │   │ Insights │  ...pages    │
-│  └────┬─────┘   └────┬─────┘   └────┬─────┘              │
-│       │              │              │                    │
-│  ┌────┴──────────────┴──────────────┴────┐               │
-│  │           Zustand Stores               │              │
-│  │   timerStore (in-memory)               │              │
-│  │   uiStore (persisted to localStorage)  │              │
-│  └───────────────────┬───────────────────┘               │
-│                      │                                   │
-│  ┌───────────────────┴───────────────────┐               │
-│  │        Web Worker (timer.worker)      │               │
-│  │   setInterval → postMessage('tick')   │               │
-│  └────────────────────────────────────────┘              │
-│                                                          │
-│  ┌────────────────────────────────────────┐              │
-│  │       Firebase Auth + Firestore        │              │
-│  │  users/{uid}/{projects, tasks,         │              │
-│  │   sessions, streaks, settings,         │              │
-│  │   templates, backups}                  │              │
-│  │  initializeFirestore + persistent      │              │
-│  │  LocalCache -- offline, multi-tab safe │              │
-│  └────────────────────────────────────────┘              │
-└──────────────────────────────────────────────────────────┘
-```
+![ClockWise Architecture Diagram](public/sys-arch.png)
 
 ### Notable Design Decisions
 
