@@ -10,12 +10,19 @@ export type ProjectColor =
 
 export type PhaseType = 'focus' | 'short_break' | 'long_break';
 
-export type TimerStatus = 'idle' | 'running' | 'paused' | 'phase_complete' | 'session_complete';
+export type TimerStatus =
+  | 'idle'
+  | 'running'
+  | 'paused'
+  | 'completing'
+  | 'phase_complete'
+  | 'session_complete';
 
 export type TimerStyle = 'digital' | 'clock_numeric' | 'analog';
 
 export interface Project {
   id: string;
+  user_id: string;
   name: string;
   description?: string;
   color: ProjectColor;
@@ -25,6 +32,7 @@ export interface Project {
 
 export interface Task {
   id: string;
+  user_id: string;
   project_id?: string;
   name: string;
   is_completed: boolean;
@@ -36,6 +44,7 @@ export interface Task {
 
 export interface Session {
   id: string;
+  user_id: string;
   project_id?: string;
   task_id?: string;
   type: PhaseType;
@@ -65,6 +74,7 @@ export interface TimerSettings {
 }
 
 export interface DailyStreak {
+  user_id: string;
   date: string;
   focus_seconds: number;
   sessions_started: number;
@@ -74,6 +84,7 @@ export interface DailyStreak {
 
 export interface TimerTemplate {
   id: string;
+  user_id: string;
   name: string;
   focus_minutes: number;
   short_break_minutes: number;

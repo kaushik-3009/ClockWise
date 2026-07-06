@@ -1,8 +1,10 @@
-import { db } from './schema';
+import { collection, getDocs, writeBatch, doc } from 'firebase/firestore';
+import { getFirebaseFirestore } from '@/lib/firebase';
 import { formatDateKey } from '@/lib/time';
+import { DEFAULT_SETTINGS } from '@/db/queries/settings';
 import type { Project, Task, Session, DailyStreak, TimerTemplate } from '@/types';
 
-const PROJECT_SEEDS: Omit<Project, 'id' | 'created_at'>[] = [
+const PROJECT_SEEDS: Omit<Project, 'id' | 'created_at' | 'user_id'>[] = [
   {
     name: 'University',
     description: 'Bachelor degree coursework and assignments',
@@ -66,12 +68,57 @@ const TASK_SEEDS: { name: string; projectIndex: number }[] = [
   { name: 'Seed order', projectIndex: 7 },
 ];
 
+const DEFAULT_TEMPLATES: Omit<TimerTemplate, 'id' | 'created_at' | 'user_id'>[] = [
+  {
+    name: 'Classic Pomodoro',
+    focus_minutes: 25,
+    short_break_minutes: 5,
+    long_break_minutes: 15,
+    phases_per_session: 8,
+    long_break_after_n: 4,
+  },
+  {
+    name: 'Deep Work',
+    focus_minutes: 50,
+    short_break_minutes: 10,
+    long_break_minutes: 30,
+    phases_per_session: 4,
+    long_break_after_n: 2,
+  },
+  {
+    name: 'Quick Sprint',
+    focus_minutes: 15,
+    short_break_minutes: 3,
+    long_break_minutes: 10,
+    phases_per_session: 6,
+    long_break_after_n: 3,
+  },
+  {
+    name: 'Study Session',
+    focus_minutes: 45,
+    short_break_minutes: 10,
+    long_break_minutes: 20,
+    phases_per_session: 10,
+    long_break_after_n: 3,
+  },
+];
+
 function randInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 function pick<T>(arr: T[]): T {
   return arr[randInt(0, arr.length - 1)];
+}
+
+function stripUndefinedSession(obj: Session): Session {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj as unknown as Record<string, unknown>)) {
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+  return result as unknown as Session;
 }
 
 function weightedPick<T>(arr: T[], weights: number[]): T {
@@ -84,37 +131,56 @@ function weightedPick<T>(arr: T[], weights: number[]): T {
   return arr[arr.length - 1];
 }
 
-/** Expose for manual console use: window.seedClockWise() */
-async function _seed(force = false): Promise<void> {
-  await db.open();
+async function hasExistingData(userId: string): Promise<boolean> {
+  const db = getFirebaseFirestore();
+  const [projectsSnap, templatesSnap] = await Promise.all([
+    getDocs(collection(db, 'users', userId, 'projects')),
+    getDocs(collection(db, 'users', userId, 'templates')),
+  ]);
+  return projectsSnap.size > 0 || templatesSnap.size > 0;
+}
 
-  // Check if already seeded
-  if (!force) {
-    const existingProjects = await db.projects.count();
-    if (existingProjects > 0) {
-      console.log('[seed] Database already has data, skipping seed.');
+export async function seedNewUser(userId: string, includeDemoData = true): Promise<void> {
+  if (!includeDemoData) {
+    await seedDefaultsOnly(userId);
+    return;
+  }
+
+  console.log('[seed] Starting seed for user:', userId);
+
+  try {
+    const hasData = await hasExistingData(userId);
+    if (hasData) {
+      console.log('[seed] User already has data, skipping seed.');
       return;
     }
+  } catch (err) {
+    console.error('[seed] Failed to check existing data (rules not deployed?):', err);
+    throw err;
   }
 
   console.log('[seed] Populating demo data...');
+  const db = getFirebaseFirestore();
+  const batch = writeBatch(db);
+  const now = Date.now();
 
   // Insert projects
-  const now = Date.now();
   const projects: Project[] = PROJECT_SEEDS.map((p) => ({
     ...p,
+    user_id: userId,
     id: crypto.randomUUID(),
     created_at: now - randInt(0, 90 * 24 * 60 * 60 * 1000),
   }));
-  await db.projects.bulkAdd(projects);
+  const projectCol = collection(db, 'users', userId, 'projects');
+  projects.forEach((p) => batch.set(doc(projectCol, p.id), p));
 
-  // Insert tasks with realistic completion over time
+  // Insert tasks
   const tasks: Task[] = TASK_SEEDS.map((t) => {
     const createdAt = now - randInt(7 * 24 * 60 * 60 * 1000, 85 * 24 * 60 * 60 * 1000);
-    // Older tasks more likely completed
     const ageDays = (now - createdAt) / (24 * 60 * 60 * 1000);
     const completionChance = Math.min(0.2 + ageDays * 0.015, 0.85);
     return {
+      user_id: userId,
       id: crypto.randomUUID(),
       project_id: projects[t.projectIndex].id,
       name: t.name,
@@ -122,9 +188,10 @@ async function _seed(force = false): Promise<void> {
       created_at: createdAt,
     };
   });
-  await db.tasks.bulkAdd(tasks);
+  const taskCol = collection(db, 'users', userId, 'tasks');
+  tasks.forEach((t) => batch.set(doc(taskCol, t.id), t));
 
-  // Generate sessions for last 90 days with realistic patterns
+  // Generate sessions
   const sessions: Session[] = [];
   const activeProjectsList = projects.filter((p) => p.status === 'active');
   const activeTasksList = tasks.filter((t) => !t.is_completed);
@@ -133,19 +200,16 @@ async function _seed(force = false): Promise<void> {
     const dayBase = new Date(now);
     dayBase.setHours(0, 0, 0, 0);
     dayBase.setDate(dayBase.getDate() - dayOffset);
-    const dayOfWeek = dayBase.getDay(); // 0 = Sunday, 6 = Saturday
+    const dayOfWeek = dayBase.getDay();
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
-    // Determine session count based on day type and streak patterns
     let sessionCount: number;
     if (isWeekend) {
       sessionCount = weightedPick([0, 1, 2], [0.35, 0.45, 0.2]);
     } else {
-      // Weekdays: more productive, with some variation
       sessionCount = weightedPick([0, 1, 2, 3, 4], [0.05, 0.15, 0.35, 0.35, 0.1]);
     }
 
-    // Simulate streaks: if yesterday had sessions, 80% chance today does too
     if (dayOffset < 89) {
       const yesterdayHadSessions = sessions.some((s) => {
         const d = new Date(s.started_at);
@@ -162,7 +226,6 @@ async function _seed(force = false): Promise<void> {
 
     if (sessionCount === 0) continue;
 
-    // Pick starting hour with realistic distribution (morning peak, afternoon, evening)
     const startHour = weightedPick(
       [7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 19, 20, 21],
       [0.08, 0.15, 0.18, 0.12, 0.05, 0.08, 0.12, 0.1, 0.05, 0.03, 0.02, 0.01, 0.01]
@@ -171,7 +234,6 @@ async function _seed(force = false): Promise<void> {
     let hour = startHour;
 
     for (let s = 0; s < sessionCount; s++) {
-      // Pick project with weighted preference (some projects get more time)
       const projectWeights = activeProjectsList.map((_, i) =>
         i === 0 ? 1.5 : i === 1 ? 1.3 : 1.0
       );
@@ -179,14 +241,15 @@ async function _seed(force = false): Promise<void> {
       const projectTasks = activeTasksList.filter((t) => t.project_id === project.id);
       const task = projectTasks.length > 0 ? pick(projectTasks) : undefined;
 
-      const focusDuration = randInt(20, 28) * 60; // 20-28 min focus
-      const breakDuration = randInt(4, 7) * 60; // 4-7 min break
-      const completed = Math.random() > 0.12; // 88% completion rate
+      const focusDuration = randInt(20, 28) * 60;
+      const breakDuration = randInt(4, 7) * 60;
+      const completed = Math.random() > 0.12;
 
       const startedAt = new Date(dayBase);
       startedAt.setHours(hour, randInt(0, 59), randInt(0, 59), 0);
 
       sessions.push({
+        user_id: userId,
         id: crypto.randomUUID(),
         project_id: project.id,
         task_id: task?.id,
@@ -198,11 +261,11 @@ async function _seed(force = false): Promise<void> {
         completed,
       });
 
-      // Add break after ~70% of focus sessions
       if (Math.random() > 0.3) {
         const breakStart = new Date(startedAt);
         breakStart.setMinutes(breakStart.getMinutes() + Math.floor(focusDuration / 60));
         sessions.push({
+          user_id: userId,
           id: crypto.randomUUID(),
           project_id: project.id,
           task_id: task?.id,
@@ -215,12 +278,12 @@ async function _seed(force = false): Promise<void> {
         });
       }
 
-      // Add long break after every 4th session in a day (simulating pomodoro cycles)
       if ((s + 1) % 4 === 0 && s < sessionCount - 1) {
         const longBreakDuration = randInt(12, 18) * 60;
         const longBreakStart = new Date(dayBase);
         longBreakStart.setHours(hour + 1, randInt(0, 59), 0, 0);
         sessions.push({
+          user_id: userId,
           id: crypto.randomUUID(),
           project_id: project.id,
           task_id: task?.id,
@@ -238,7 +301,8 @@ async function _seed(force = false): Promise<void> {
     }
   }
 
-  await db.sessions.bulkAdd(sessions);
+  const sessionCol = collection(db, 'users', userId, 'sessions');
+  sessions.forEach((s) => batch.set(doc(sessionCol, s.id), stripUndefinedSession(s)));
 
   // Build streaks from sessions
   const streakMap = new Map<string, DailyStreak>();
@@ -253,6 +317,7 @@ async function _seed(force = false): Promise<void> {
       existing.goal_met = existing.focus_seconds >= 25 * 60;
     } else {
       streakMap.set(dateKey, {
+        user_id: userId,
         date: dateKey,
         focus_seconds: s.duration_seconds,
         sessions_started: 1,
@@ -261,92 +326,63 @@ async function _seed(force = false): Promise<void> {
       });
     }
   }
-  await db.streaks.bulkAdd(Array.from(streakMap.values()));
+  const streakCol = collection(db, 'users', userId, 'streaks');
+  Array.from(streakMap.values()).forEach((st) => batch.set(doc(streakCol, st.date), st));
 
-  // Default templates
-  const defaultTemplates: Omit<TimerTemplate, 'id' | 'created_at'>[] = [
-    {
-      name: 'Classic Pomodoro',
-      focus_minutes: 25,
-      short_break_minutes: 5,
-      long_break_minutes: 15,
-      phases_per_session: 8,
-      long_break_after_n: 4,
-    },
-    {
-      name: 'Deep Work',
-      focus_minutes: 50,
-      short_break_minutes: 10,
-      long_break_minutes: 30,
-      phases_per_session: 4,
-      long_break_after_n: 2,
-    },
-    {
-      name: 'Quick Sprint',
-      focus_minutes: 15,
-      short_break_minutes: 3,
-      long_break_minutes: 10,
-      phases_per_session: 6,
-      long_break_after_n: 3,
-    },
-    {
-      name: 'Study Session',
-      focus_minutes: 45,
-      short_break_minutes: 10,
-      long_break_minutes: 20,
-      phases_per_session: 10,
-      long_break_after_n: 3,
-    },
-  ];
-  await db.templates.bulkAdd(
-    defaultTemplates.map((t) => ({ ...t, id: crypto.randomUUID(), created_at: now }))
-  );
+  try {
+    await batch.commit();
+    console.log('[seed] Batch commit succeeded');
+  } catch (err) {
+    console.error('[seed] Batch commit failed:', err);
+    throw err;
+  }
 
-  // Default settings
-  await db.settings.put({
-    focus_minutes: 25,
-    short_break_minutes: 5,
-    long_break_minutes: 15,
-    phases_per_session: 8,
-    long_break_after_n: 4,
-    auto_start: false,
-    sound_enabled: true,
-    notifications_enabled: false,
-    timer_style: 'digital',
-    accent_color: '#E8521A',
-    ambient_sound: 'off',
-    ambient_volume: 0.3,
-    weekly_goal_hours: 20,
-    warn_before_seconds: 60,
-    id: 1,
-  });
+  await seedDefaultsOnly(userId);
 
   console.log(
     `[seed] Done: ${projects.length} projects, ${tasks.length} tasks, ${sessions.length} sessions, ${streakMap.size} streak days.`
   );
 }
 
-export async function seedDatabase(force = false): Promise<void> {
-  try {
-    await _seed(force);
-  } catch (err) {
-    console.error('[seed] Failed to seed database:', err);
-    throw err;
-  }
-}
+export async function seedDefaultsOnly(userId: string): Promise<void> {
+  const db = getFirebaseFirestore();
+  const templatesCol = collection(db, 'users', userId, 'templates');
+  const existing = await getDocs(templatesCol);
+  if (existing.size > 0) return;
 
-export async function clearDatabase(): Promise<void> {
-  await db.open();
-  await db.transaction('rw', db.tables, async () => {
-    for (const table of db.tables) {
-      await table.clear();
-    }
+  const now = Date.now();
+  const batch = writeBatch(db);
+  DEFAULT_TEMPLATES.forEach((t) => {
+    const id = crypto.randomUUID();
+    batch.set(doc(templatesCol, id), { ...t, user_id: userId, id, created_at: now });
   });
-  console.log('[seed] Database cleared.');
+
+  // Ensure default settings document exists
+  batch.set(doc(db, 'users', userId, 'settings', 'default'), DEFAULT_SETTINGS);
+
+  await batch.commit();
 }
 
-// Expose for debugging in development only
-if (import.meta.env.DEV && typeof window !== 'undefined') {
-  (window as unknown as Record<string, unknown>).seedClockWise = seedDatabase;
-  (window as unknown as Record<string, unknown>).clearClockWise = clearDatabase;
+export async function clearUserData(userId: string): Promise<void> {
+  const db = getFirebaseFirestore();
+  const collections = [
+    'projects',
+    'tasks',
+    'sessions',
+    'streaks',
+    'templates',
+    'settings',
+  ] as const;
+  for (const name of collections) {
+    const snap = await getDocs(collection(db, 'users', userId, name));
+    const batch = writeBatch(db);
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  }
+  console.log(`[seed] Cleared data for user ${userId}.`);
+}
+
+export async function seedUserDemoData(userId: string): Promise<void> {
+  await clearUserData(userId);
+  await seedNewUser(userId, true);
 }

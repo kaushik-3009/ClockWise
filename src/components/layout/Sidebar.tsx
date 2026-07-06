@@ -12,7 +12,9 @@ import {
   Sun,
   Moon,
   Settings,
+  LogOut,
 } from 'lucide-react';
+import { useAuth } from '@/lib/useAuth';
 import { cn } from '@/lib/cn';
 import { useUiStore } from '@/stores/uiStore';
 import { useSettings } from '@/hooks/useSettings';
@@ -38,6 +40,7 @@ export function Sidebar() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { settings } = useSettings();
   const { sessions } = useSessions();
+  const { logOut } = useAuth();
 
   const weekFocusSeconds = useMemo(() => computeCurrentWeekFocusSeconds(sessions), [sessions]);
   const weekFocusHours = weekFocusSeconds / 3600;
@@ -146,6 +149,18 @@ export function Sidebar() {
               {theme === 'light' ? 'Dark mode' : 'Light mode'}
             </span>
           )}
+        </button>
+
+        {/* Log out */}
+        <button
+          onClick={() => logOut()}
+          className={cn(
+            'flex items-center gap-3 px-3 py-2 rounded-md text-sm text-text-sub hover:text-text-base hover:bg-bg-secondary transition-colors duration-fast',
+            sidebarCollapsed && 'justify-center'
+          )}
+        >
+          <LogOut className="w-5 h-5 shrink-0" />
+          {!sidebarCollapsed && <span className="whitespace-nowrap">Log out</span>}
         </button>
 
         {/* Collapse toggle */}

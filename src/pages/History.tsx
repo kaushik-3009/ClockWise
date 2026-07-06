@@ -16,7 +16,7 @@ import {
 import { useSessions } from '@/hooks/useSessions';
 import { useProjects } from '@/hooks/useProjects';
 import { useTasks } from '@/hooks/useTasks';
-import { formatDurationShort, formatDuration } from '@/lib/time';
+import { formatDurationShort, formatDuration, formatDateKey } from '@/lib/time';
 import { groupSessionsByDay } from '@/lib/stats';
 import { PROJECT_COLORS } from '@/lib/constants';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -104,8 +104,7 @@ export function HistoryPage() {
     // If URL has ?date=, show only that date
     if (initialDate) {
       result = result.filter((s) => {
-        const d = new Date(s.started_at);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const key = formatDateKey(new Date(s.started_at));
         return key === initialDate;
       });
     }

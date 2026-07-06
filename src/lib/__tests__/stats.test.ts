@@ -5,6 +5,7 @@ import type { Session } from '@/types';
 function makeSession(overrides: Partial<Session> = {}): Session {
   return {
     id: 's1',
+    user_id: 'u1',
     type: 'focus',
     started_at: Date.now(),
     duration_seconds: 1500,

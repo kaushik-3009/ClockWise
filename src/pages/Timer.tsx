@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useTimer } from '@/hooks/useTimer';
 import { useProjects } from '@/hooks/useProjects';
+import { useTasks } from '@/hooks/useTasks';
 import { ModeHeader } from '@/components/timer/ModeHeader';
 import { PhaseBadge } from '@/components/timer/PhaseBadge';
 import { TimerDisplay } from '@/components/timer/TimerDisplay';
@@ -33,12 +34,19 @@ export function TimerPage() {
   const [showShortcuts, setShowShortcuts] = useState(false);
 
   const { projects } = useProjects();
+  const { allTasks } = useTasks();
   const activeProject = useMemo(
     () => projects.find((p) => p.id === active_project_id),
     [projects, active_project_id]
   );
+  const activeTask = useMemo(
+    () => allTasks.find((t) => t.id === active_task_id),
+    [allTasks, active_task_id]
+  );
 
-  const displayName = activeProject?.name ?? undefined;
+  const displayName = activeTask
+    ? `${activeProject?.name ?? 'Untitled'} · ${activeTask.name}`
+    : (activeProject?.name ?? undefined);
   const displayColor = activeProject ? PROJECT_COLORS[activeProject.color] : undefined;
 
   // Show session complete overlay when status becomes session_complete
@@ -64,8 +72,8 @@ export function TimerPage() {
   }, []);
 
   return (
-    <div className="flex flex-col items-center justify-center h-full min-h-[calc(100vh-64px)] lg:min-h-0 gap-8 sm:gap-10 lg:gap-12 xl:gap-14 px-4 py-8 animate-[page-enter_200ms_ease]">
-      <div className="flex flex-col items-center gap-8 sm:gap-10 lg:gap-12 xl:gap-14">
+    <div className="flex flex-col items-center justify-center h-full min-h-[calc(100vh-64px)] lg:min-h-0 gap-8 sm:gap-10 lg:gap-12 xl:gap-14 3xl:gap-16 px-4 py-8 animate-[page-enter_200ms_ease]">
+      <div className="flex flex-col items-center gap-8 sm:gap-10 lg:gap-12 xl:gap-14 3xl:gap-16">
         <ModeHeader phaseType={phase_type} />
 
         <FocusingOnBar

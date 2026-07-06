@@ -1,28 +1,9 @@
 // Web Audio API sound generator — no external files needed
-let audioCtx: AudioContext | null = null;
+// Uses a shared AudioContext to avoid iOS Safari limits
+import { getSharedAudioContext } from './ambient';
 
 function getContext(): AudioContext {
-  if (!audioCtx) {
-    audioCtx = new AudioContext();
-  }
-  if (audioCtx.state === 'suspended') {
-    audioCtx.resume();
-  }
-  return audioCtx;
-}
-
-// One-time listener to unlock audio on first user interaction
-function unlockAudio() {
-  if (!audioCtx) {
-    audioCtx = new AudioContext();
-  }
-  if (audioCtx.state === 'suspended') {
-    audioCtx.resume();
-  }
-}
-
-if (typeof document !== 'undefined') {
-  document.addEventListener('click', unlockAudio, { once: true });
+  return getSharedAudioContext();
 }
 
 export function playTimerCompleteSound(enabled: boolean): void {

@@ -22,10 +22,6 @@ export function getActiveDays(sessions: Session[]): string[] {
   return Array.from(active).sort();
 }
 
-export function isDayActive(date: string, sessions: Session[]): boolean {
-  return getActiveDays(sessions).includes(date);
-}
-
 export function computeCurrentStreak(sessions: Session[]): number {
   const activeDays = getActiveDays(sessions);
   if (activeDays.length === 0) return 0;

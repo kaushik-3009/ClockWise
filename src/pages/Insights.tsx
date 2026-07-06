@@ -357,10 +357,10 @@ export function InsightsPage() {
             <div className="bg-bg-card border border-border-base rounded-lg p-5 flex flex-col gap-3">
               <div className="text-[13px] text-text-sub font-bold tracking-wide">Best day</div>
               <div className="text-[34px] font-display font-extrabold leading-none text-text-base">
-                {bestDay.seconds > 0 ? bestDay.name.slice(0, 3) : '-'}
+                {bestDay && bestDay.seconds > 0 ? bestDay.name.slice(0, 3) : '-'}
               </div>
               <div className="inline-flex items-center gap-2 w-fit px-2.5 py-1.5 rounded-full bg-bg-secondary text-text-sub text-[13px] font-bold">
-                {bestDay.seconds > 0
+                {bestDay && bestDay.seconds > 0
                   ? `${(bestDay.seconds / 3600).toFixed(1)} hours focused`
                   : 'No focus yet'}
               </div>

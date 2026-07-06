@@ -1,5 +1,3 @@
-import 'fake-indexeddb/auto';
-
 class MockWorker {
   onmessage: ((e: MessageEvent) => void) | null = null;
   onerror: ((err: ErrorEvent) => void) | null = null;

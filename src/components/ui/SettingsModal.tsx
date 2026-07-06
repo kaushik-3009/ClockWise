@@ -1,15 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { useSettings } from '@/hooks/useSettings';
-import { seedDatabase, clearDatabase } from '@/db/seed';
-import {
-  exportData,
-  downloadExport,
-  importData,
-  downloadCSVExport,
-  getAutoBackup,
-  restoreFromAutoBackup,
-} from '@/lib/exportImport';
+import { useAuth } from '@/lib/useAuth';
+import { seedUserDemoData, clearUserData } from '@/db/seed';
+import { exportData, downloadExport, importData, downloadCSVExport } from '@/lib/exportImport';
 import { requestNotificationPermission } from '@/lib/notifications';
 import { useToastStore } from '@/components/ui/Toast';
 import { playAmbient, stopAmbient } from '@/lib/ambient';
@@ -35,19 +29,14 @@ const AMBIENT_OPTIONS = [
 ] as const;
 
 export function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { user, logOut } = useAuth();
   const { settings, saveSettings } = useSettings();
   const addToast = useToastStore((s) => s.addToast);
   const [form, setForm] = useState<TimerSettings>(settings);
   const [importStatus, setImportStatus] = useState<string | null>(null);
-  const [hasAutoBackup, setHasAutoBackup] = useState(false);
   const [dangerAction, setDangerAction] = useState<'clear' | 'seed' | null>(null);
   const [dangerConfirm, setDangerConfirm] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    getAutoBackup().then((data) => setHasAutoBackup(data !== null));
-  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -96,10 +85,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
 
   return (
     <Modal open={open} onClose={onClose} title="Settings">
-      <form
-        onSubmit={handleSubmit}
-        className="flex flex-col gap-5 max-h-[70vh] overflow-y-auto pr-1"
-      >
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         {/* Timer Durations */}
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -329,7 +315,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
 
         <button
           type="submit"
-          className="w-full h-11 bg-brand hover:bg-brand-hover text-white font-semibold text-sm rounded-md transition-colors duration-fast mt-1"
+          className="w-full h-12 bg-brand hover:bg-brand-hover text-white font-semibold text-base rounded-md transition-colors duration-fast mt-1 shrink-0"
         >
           Save Settings
         </button>
@@ -338,7 +324,8 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           <button
             type="button"
             onClick={async () => {
-              const data = await exportData();
+              if (!user) return;
+              const data = await exportData(user.uid);
               downloadExport(data);
             }}
             className="flex-1 h-10 rounded-md border border-border-base text-text-sub text-xs font-medium hover:text-brand hover:border-brand transition-colors"
@@ -348,7 +335,8 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           <button
             type="button"
             onClick={async () => {
-              const data = await exportData();
+              if (!user) return;
+              const data = await exportData(user.uid);
               downloadCSVExport(data);
             }}
             className="flex-1 h-10 rounded-md border border-border-base text-text-sub text-xs font-medium hover:text-brand hover:border-brand transition-colors"
@@ -369,11 +357,11 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
             className="hidden"
             onChange={async (e) => {
               const file = e.target.files?.[0];
-              if (!file) return;
+              if (!file || !user) return;
               try {
                 const text = await file.text();
                 const data = JSON.parse(text);
-                await importData(data);
+                await importData(user.uid, data);
                 setImportStatus('Import successful! Reloading...');
                 setTimeout(() => window.location.reload(), 800);
               } catch (err) {
@@ -394,27 +382,14 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           </p>
         )}
 
-        {hasAutoBackup && (
-          <div className="pt-2 border-t border-border-base">
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  await restoreFromAutoBackup();
-                  addToast('Restored from auto-backup', 'success');
-                  setTimeout(() => window.location.reload(), 600);
-                } catch {
-                  addToast('Failed to restore backup', 'error');
-                }
-              }}
-              className="w-full h-10 rounded-md border border-border-base text-text-sub text-sm font-medium hover:text-brand hover:border-brand transition-colors"
-            >
-              Restore from Auto-Backup
-            </button>
-          </div>
-        )}
-
         <div className="pt-2 border-t border-border-base">
+          <button
+            type="button"
+            onClick={() => logOut()}
+            className="w-full h-10 rounded-md border border-border-base text-text-sub text-sm font-medium hover:text-text-base hover:bg-bg-secondary transition-colors mb-4"
+          >
+            Log out
+          </button>
           <p className="text-xs text-text-muted mb-2 font-medium uppercase tracking-wide">
             Danger Zone
           </p>
@@ -467,12 +442,12 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
                     dangerAction === 'clear' ? dangerConfirm !== 'DELETE' : dangerConfirm !== 'SEED'
                   }
                   onClick={async () => {
+                    if (!user) return;
                     try {
                       if (dangerAction === 'clear') {
-                        await clearDatabase();
+                        await clearUserData(user.uid);
                       } else {
-                        await clearDatabase();
-                        await seedDatabase(true);
+                        await seedUserDemoData(user.uid);
                       }
                       window.location.reload();
                     } catch (err) {

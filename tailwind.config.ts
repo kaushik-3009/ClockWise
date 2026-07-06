@@ -4,6 +4,10 @@ export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
+      screens: {
+        '3xl': '1920px',
+        '4xl': '2400px',
+      },
       colors: {
         brand: 'var(--color-brand)',
         'brand-hover': 'var(--color-brand-hover)',
@@ -21,11 +25,11 @@ export default {
         'text-muted': 'var(--text-muted)',
         'text-inverse': 'var(--text-inverse)',
         success: 'var(--color-success)',
-        'success-light': '#1A3A1A',
+        'success-light': 'var(--color-success-light)',
         warning: 'var(--color-warning)',
         error: 'var(--color-error)',
-        'error-hover': '#C0392B',
-        'error-light': '#3A1A1A',
+        'error-hover': 'var(--color-error-hover)',
+        'error-light': 'var(--color-error-light)',
       },
       fontFamily: {
         display: ['"Barlow Condensed"', 'sans-serif'],

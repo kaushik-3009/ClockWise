@@ -1,53 +1,75 @@
-import { db } from '../schema';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  query,
+  where,
+  writeBatch,
+} from 'firebase/firestore';
+import { getFirebaseFirestore } from '@/lib/firebase';
 import type { Project } from '@/types';
 
-export async function getAllProjects(): Promise<Project[]> {
-  return db.projects.orderBy('created_at').reverse().toArray();
+function projectRef(userId: string, id: string) {
+  return doc(getFirebaseFirestore(), 'users', userId, 'projects', id);
 }
 
-export async function getActiveProjects(): Promise<Project[]> {
-  return db.projects.where('status').equals('active').reverse().sortBy('created_at');
+function tasksRef(userId: string) {
+  return collection(getFirebaseFirestore(), 'users', userId, 'tasks');
 }
 
-export async function getProjectById(id: string): Promise<Project | undefined> {
-  return db.projects.get(id);
+function sessionsRef(userId: string) {
+  return collection(getFirebaseFirestore(), 'users', userId, 'sessions');
+}
+
+export async function getProjectById(userId: string, id: string): Promise<Project | undefined> {
+  const snapshot = await getDoc(projectRef(userId, id));
+  if (!snapshot.exists()) return undefined;
+  return { ...(snapshot.data() as Project), id: snapshot.id };
 }
 
 export async function createProject(
-  data: Omit<Project, 'id' | 'created_at' | 'status'>
+  userId: string,
+  data: Omit<Project, 'id' | 'created_at' | 'status' | 'user_id'>
 ): Promise<Project> {
   const project: Project = {
     ...data,
+    user_id: userId,
     id: crypto.randomUUID(),
     status: 'active',
     created_at: Date.now(),
   };
-  await db.projects.add(project);
+  await setDoc(projectRef(userId, project.id), project);
   return project;
 }
 
 export async function updateProject(
+  userId: string,
   id: string,
-  changes: Partial<Omit<Project, 'id'>>
+  changes: Partial<Omit<Project, 'id' | 'user_id'>>
 ): Promise<void> {
-  await db.projects.update(id, changes);
+  await setDoc(projectRef(userId, id), changes, { merge: true });
 }
 
-export async function deleteProject(id: string): Promise<void> {
-  await db.projects.delete(id);
+export async function deleteProject(userId: string, id: string): Promise<void> {
+  const batch = writeBatch(getFirebaseFirestore());
+
   // Cascade: delete associated tasks and sessions
-  await db.tasks.where('project_id').equals(id).delete();
-  await db.sessions.where('project_id').equals(id).delete();
+  const tasksSnapshot = await getDocs(query(tasksRef(userId), where('project_id', '==', id)));
+  tasksSnapshot.docs.forEach((d) => batch.delete(d.ref));
+
+  const sessionsSnapshot = await getDocs(query(sessionsRef(userId), where('project_id', '==', id)));
+  sessionsSnapshot.docs.forEach((d) => batch.delete(d.ref));
+
+  batch.delete(projectRef(userId, id));
+  await batch.commit();
 }
 
-export async function getArchivedProjects(): Promise<Project[]> {
-  return db.projects.where('status').equals('archived').reverse().sortBy('created_at');
+export async function archiveProject(userId: string, id: string): Promise<void> {
+  await setDoc(projectRef(userId, id), { status: 'archived' }, { merge: true });
 }
 
-export async function archiveProject(id: string): Promise<void> {
-  await db.projects.update(id, { status: 'archived' });
-}
-
-export async function unarchiveProject(id: string): Promise<void> {
-  await db.projects.update(id, { status: 'active' });
+export async function unarchiveProject(userId: string, id: string): Promise<void> {
+  await setDoc(projectRef(userId, id), { status: 'active' }, { merge: true });
 }

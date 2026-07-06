@@ -81,23 +81,27 @@ export function computeCurrentWeekFocusSeconds(sessions: Session[]): number {
     .reduce((sum, s) => sum + s.duration_seconds, 0);
 }
 
-/** Best weekday in the period — returns { name, seconds } */
+/** Best weekday in the period — returns { name, seconds } or null if no data */
 export function computeBestDay(
   sessions: Session[],
   start: Date,
   end: Date
-): { name: string; seconds: number } {
+): { name: string; seconds: number } | null {
   const startMs = start.getTime();
   const endMs = end.getTime();
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const stats = days.map(() => 0);
 
+  let hasData = false;
   for (const s of sessions) {
     if (s.type !== 'focus') continue;
     if (s.started_at < startMs || s.started_at > endMs) continue;
     const day = new Date(s.started_at).getDay();
     stats[day] += s.duration_seconds;
+    hasData = true;
   }
+
+  if (!hasData) return null;
 
   let maxIdx = 0;
   let maxVal = 0;

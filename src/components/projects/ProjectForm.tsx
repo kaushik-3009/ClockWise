@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { PROJECT_COLORS, MAX_NAME_LENGTH, MAX_DESCRIPTION_LENGTH } from '@/lib/constants';
 import type { Project, ProjectColor } from '@/types';
@@ -17,6 +17,15 @@ export function ProjectForm({ open, onClose, onSubmit, initialData }: ProjectFor
   const [description, setDescription] = useState(initialData?.description ?? '');
   const [color, setColor] = useState<ProjectColor>(initialData?.color ?? 'blue');
 
+  // Reset form when modal opens/closes
+  useEffect(() => {
+    if (open) {
+      setName(initialData?.name ?? '');
+      setDescription(initialData?.description ?? '');
+      setColor(initialData?.color ?? 'blue');
+    }
+  }, [open, initialData]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -25,11 +34,6 @@ export function ProjectForm({ open, onClose, onSubmit, initialData }: ProjectFor
       description: description.trim().slice(0, MAX_DESCRIPTION_LENGTH) || undefined,
       color,
     });
-    if (!initialData) {
-      setName('');
-      setDescription('');
-      setColor('blue');
-    }
     onClose();
   };
 

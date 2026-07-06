@@ -41,6 +41,7 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/__\/.*/],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
@@ -66,7 +67,7 @@ export default defineConfig({
         manualChunks: {
           recharts: ['recharts'],
           vendor: ['react', 'react-dom', 'react-router-dom', 'zustand'],
-          db: ['dexie', 'dexie-react-hooks'],
+          firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore'],
           date: ['date-fns'],
         },
       },

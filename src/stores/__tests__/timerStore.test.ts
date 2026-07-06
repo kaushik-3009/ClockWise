@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useTimerStore, DEFAULT_SETTINGS } from '../timerStore';
+import { useTimerStore } from '../timerStore';
+import { DEFAULT_SETTINGS } from '@/db/queries/settings';
 
 describe('timerStore', () => {
   beforeEach(() => {

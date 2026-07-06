@@ -1,5 +1,7 @@
-import { db } from '@/db/schema';
+import { collection, getDocs, writeBatch, doc, setDoc } from 'firebase/firestore';
+import { getFirebaseFirestore } from '@/lib/firebase';
 import { getAutoBackup, saveAutoBackup } from '@/db/queries/backups';
+import { DEFAULT_SETTINGS } from '@/db/queries/settings';
 import type {
   ExportData,
   Project,
@@ -57,21 +59,32 @@ function isPhaseType(value: unknown): value is PhaseType {
 
 function validateProject(value: unknown): Project {
   if (!isPlainObject(value)) throw new Error('Invalid project: expected object');
-  const { id, name, description, color, status, created_at } = value;
+  const { id, user_id, name, description, color, status, created_at } = value;
   if (!isString(id)) throw new Error('Invalid project.id');
+  if (!isString(user_id)) throw new Error('Invalid project.user_id');
   if (!isString(name)) throw new Error('Invalid project.name');
   if (!isOptionalString(description)) throw new Error('Invalid project.description');
   if (!isProjectColor(color)) throw new Error('Invalid project.color');
   if (status !== 'active' && status !== 'archived') throw new Error('Invalid project.status');
   if (!isNumber(created_at)) throw new Error('Invalid project.created_at');
-  return { id, name, description, color, status, created_at };
+  return { id, user_id, name, description, color, status, created_at };
 }
 
 function validateTask(value: unknown): Task {
   if (!isPlainObject(value)) throw new Error('Invalid task: expected object');
-  const { id, project_id, name, is_completed, created_at, priority, note, estimated_pomodoros } =
-    value;
+  const {
+    id,
+    user_id,
+    project_id,
+    name,
+    is_completed,
+    created_at,
+    priority,
+    note,
+    estimated_pomodoros,
+  } = value;
   if (!isString(id)) throw new Error('Invalid task.id');
+  if (!isString(user_id)) throw new Error('Invalid task.user_id');
   if (!isOptionalString(project_id)) throw new Error('Invalid task.project_id');
   if (!isString(name)) throw new Error('Invalid task.name');
   if (!isBoolean(is_completed)) throw new Error('Invalid task.is_completed');
@@ -86,13 +99,24 @@ function validateTask(value: unknown): Task {
   }
   if (!isOptionalString(note)) throw new Error('Invalid task.note');
   if (!isOptionalNumber(estimated_pomodoros)) throw new Error('Invalid task.estimated_pomodoros');
-  return { id, project_id, name, is_completed, created_at, priority, note, estimated_pomodoros };
+  return {
+    id,
+    user_id,
+    project_id,
+    name,
+    is_completed,
+    created_at,
+    priority,
+    note,
+    estimated_pomodoros,
+  };
 }
 
 function validateSession(value: unknown): Session {
   if (!isPlainObject(value)) throw new Error('Invalid session: expected object');
   const {
     id,
+    user_id,
     project_id,
     task_id,
     type,
@@ -104,6 +128,7 @@ function validateSession(value: unknown): Session {
     note,
   } = value;
   if (!isString(id)) throw new Error('Invalid session.id');
+  if (!isString(user_id)) throw new Error('Invalid session.user_id');
   if (!isOptionalString(project_id)) throw new Error('Invalid session.project_id');
   if (!isOptionalString(task_id)) throw new Error('Invalid session.task_id');
   if (!isPhaseType(type)) throw new Error('Invalid session.type');
@@ -116,6 +141,7 @@ function validateSession(value: unknown): Session {
   if (!isOptionalString(note)) throw new Error('Invalid session.note');
   return {
     id,
+    user_id,
     project_id,
     task_id,
     type,
@@ -130,7 +156,8 @@ function validateSession(value: unknown): Session {
 
 function validateDailyStreak(value: unknown): DailyStreak {
   if (!isPlainObject(value)) throw new Error('Invalid streak: expected object');
-  const { date, focus_seconds, sessions_started, sessions_completed, goal_met } = value;
+  const { user_id, date, focus_seconds, sessions_started, sessions_completed, goal_met } = value;
+  if (!isString(user_id)) throw new Error('Invalid streak.user_id');
   if (!isString(date)) throw new Error('Invalid streak.date');
   if (!isNumber(focus_seconds) || focus_seconds < 0)
     throw new Error('Invalid streak.focus_seconds');
@@ -139,7 +166,7 @@ function validateDailyStreak(value: unknown): DailyStreak {
   if (!isNumber(sessions_completed) || sessions_completed < 0)
     throw new Error('Invalid streak.sessions_completed');
   if (!isBoolean(goal_met)) throw new Error('Invalid streak.goal_met');
-  return { date, focus_seconds, sessions_started, sessions_completed, goal_met };
+  return { user_id, date, focus_seconds, sessions_started, sessions_completed, goal_met };
 }
 
 function validateTimerSettings(value: unknown): TimerSettings & { id?: 1 } {
@@ -231,14 +258,22 @@ function validateExportData(value: unknown): ExportData {
   };
 }
 
-export async function exportData(): Promise<ExportData> {
-  const [projects, tasks, sessions, streaks, settings] = await Promise.all([
-    db.projects.toArray(),
-    db.tasks.toArray(),
-    db.sessions.toArray(),
-    db.streaks.toArray(),
-    db.settings.get(1),
+export async function exportData(userId: string): Promise<ExportData> {
+  const db = getFirebaseFirestore();
+  const [projectsSnap, tasksSnap, sessionsSnap, streaksSnap, settingsSnap] = await Promise.all([
+    getDocs(collection(db, 'users', userId, 'projects')),
+    getDocs(collection(db, 'users', userId, 'tasks')),
+    getDocs(collection(db, 'users', userId, 'sessions')),
+    getDocs(collection(db, 'users', userId, 'streaks')),
+    getDocs(collection(db, 'users', userId, 'settings')),
   ]);
+
+  const projects = projectsSnap.docs.map((d) => ({ ...(d.data() as Project), id: d.id }));
+  const tasks = tasksSnap.docs.map((d) => ({ ...(d.data() as Task), id: d.id }));
+  const sessions = sessionsSnap.docs.map((d) => ({ ...(d.data() as Session), id: d.id }));
+  const streaks = streaksSnap.docs.map((d) => ({ ...(d.data() as DailyStreak), date: d.id }));
+  const settingsDoc = settingsSnap.docs[0];
+  const settings = settingsDoc ? (settingsDoc.data() as TimerSettings) : DEFAULT_SETTINGS;
 
   return {
     version: 1,
@@ -247,7 +282,7 @@ export async function exportData(): Promise<ExportData> {
     tasks,
     sessions,
     streaks,
-    settings: settings ?? null,
+    settings,
   };
 }
 
@@ -276,6 +311,7 @@ function buildSessionsCSV(sessions: Session[]): string {
   const rows = [
     [
       'ID',
+      'User ID',
       'Project ID',
       'Task ID',
       'Type',
@@ -289,6 +325,7 @@ function buildSessionsCSV(sessions: Session[]): string {
   for (const s of sessions) {
     rows.push([
       escapeCSV(s.id),
+      escapeCSV(s.user_id),
       escapeCSV(s.project_id),
       escapeCSV(s.task_id),
       escapeCSV(s.type),
@@ -318,32 +355,40 @@ export function downloadCSVExport(data: ExportData): void {
 export { getAutoBackup };
 
 export async function autoBackup(): Promise<void> {
-  try {
-    const data = await exportData();
-    await saveAutoBackup(data);
-  } catch {
-    // Silently fail so a backup error never breaks the timer flow.
-  }
+  // Auto-backup is redundant with Firestore persistence.
 }
 
-export async function restoreFromAutoBackup(): Promise<boolean> {
-  const data = await getAutoBackup();
-  if (!data) return false;
-  await importData(data);
-  return true;
-}
-
-export async function importData(data: ExportData): Promise<void> {
+export async function importData(userId: string, data: ExportData): Promise<void> {
   const validated = validateExportData(data);
+  const db = getFirebaseFirestore();
 
-  await db.projects.clear();
-  await db.tasks.clear();
-  await db.sessions.clear();
-  await db.streaks.clear();
+  // Normalize user_id to the current user so imports from other accounts still
+  // belong to the signed-in user.
+  const withUser = <T extends { user_id: string }>(item: T): T => ({ ...item, user_id: userId });
 
-  if (validated.projects.length) await db.projects.bulkAdd(validated.projects);
-  if (validated.tasks.length) await db.tasks.bulkAdd(validated.tasks);
-  if (validated.sessions.length) await db.sessions.bulkAdd(validated.sessions);
-  if (validated.streaks.length) await db.streaks.bulkAdd(validated.streaks);
-  if (validated.settings) await db.settings.put({ ...validated.settings, id: 1 });
+  const projectCol = collection(db, 'users', userId, 'projects');
+  const taskCol = collection(db, 'users', userId, 'tasks');
+  const sessionCol = collection(db, 'users', userId, 'sessions');
+  const streakCol = collection(db, 'users', userId, 'streaks');
+
+  // Build all operations, then commit in batches of 500 (Firestore limit)
+  const ops: Array<{ ref: ReturnType<typeof doc>; data: unknown }> = [];
+  validated.projects.forEach((p) => ops.push({ ref: doc(projectCol, p.id), data: withUser(p) }));
+  validated.tasks.forEach((t) => ops.push({ ref: doc(taskCol, t.id), data: withUser(t) }));
+  validated.sessions.forEach((s) => ops.push({ ref: doc(sessionCol, s.id), data: withUser(s) }));
+  validated.streaks.forEach((st) => ops.push({ ref: doc(streakCol, st.date), data: withUser(st) }));
+
+  const BATCH_LIMIT = 500;
+  for (let i = 0; i < ops.length; i += BATCH_LIMIT) {
+    const chunk = ops.slice(i, i + BATCH_LIMIT);
+    const batch = writeBatch(db);
+    chunk.forEach((op) => batch.set(op.ref, op.data));
+    await batch.commit();
+  }
+
+  if (validated.settings) {
+    await setDoc(doc(db, 'users', userId, 'settings', 'default'), validated.settings);
+  }
+
+  await saveAutoBackup(validated);
 }

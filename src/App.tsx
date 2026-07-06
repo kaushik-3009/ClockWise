@@ -1,9 +1,13 @@
 import { lazy, Suspense } from 'react';
-import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { useAuth } from '@/lib/useAuth';
 import { TimerPage } from '@/pages/Timer';
 import { LandingPage } from '@/pages/Landing';
+import { LoginPage } from '@/pages/Login';
+import { SignupPage } from '@/pages/Signup';
 
 const StatisticsPage = lazy(() =>
   import('@/pages/Statistics').then((m) => ({ default: m.StatisticsPage }))
@@ -55,21 +59,56 @@ function RouteWrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
-function RootRoute() {
-  const hasVisited = localStorage.getItem('clockwise-ui');
-  if (hasVisited) {
-    return <Navigate to="/timer" replace />;
+function AuthAwareLanding() {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-bg-primary">
+        <div className="w-8 h-8 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
   }
+  if (user) return <Navigate to="/timer" replace />;
+  const hasVisited = localStorage.getItem('clockwise-ui');
+  if (hasVisited) return <Navigate to="/login" replace />;
   return <LandingPage />;
+}
+
+function ProtectedLayout() {
+  return (
+    <ProtectedRoute>
+      <AppShell />
+    </ProtectedRoute>
+  );
+}
+
+function AuthLayout() {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-bg-primary">
+        <div className="w-8 h-8 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+  if (user) return <Navigate to="/timer" replace />;
+  return <Outlet />;
 }
 
 const router = createBrowserRouter([
   {
     path: '/',
-    element: <RootRoute />,
+    element: <AuthAwareLanding />,
   },
   {
-    element: <AppShell />,
+    element: <AuthLayout />,
+    children: [
+      { path: 'login', element: <LoginPage /> },
+      { path: 'signup', element: <SignupPage /> },
+    ],
+  },
+  {
+    element: <ProtectedLayout />,
     children: [
       { path: 'timer', element: <TimerPage /> },
       {

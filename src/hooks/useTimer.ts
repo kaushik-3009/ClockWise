@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useTimerStore } from '@/stores/timerStore';
+import { useAuth } from '@/lib/useAuth';
 import { createSession, updateSession, deleteSession } from '@/db/queries/sessions';
 import {
   playClickSound,
@@ -11,46 +12,46 @@ import {
 import { notifyPhaseComplete, notifySessionComplete } from '@/lib/notifications';
 import { autoBackup } from '@/lib/exportImport';
 import { playAmbient, stopAmbient } from '@/lib/ambient';
-import type { TimerState } from '@/types';
-
-type TimerStoreState = TimerState & {
-  play: () => void;
-  pause: () => void;
-  reset: () => void;
-  skip: () => void;
-  tick: () => void;
-  advancePhase: () => void;
-  setContext: (projectId?: string, taskId?: string) => void;
-  setActiveSessionId: (id?: string) => void;
-};
 
 export function useTimer() {
-  const {
-    status,
-    phase_type,
-    phase_number,
-    total_phases,
-    remaining_seconds,
-    elapsed_seconds,
-    active_project_id,
-    active_task_id,
-    active_session_id,
-    settings,
-    play: playAction,
-    pause: pauseAction,
-    reset: resetAction,
-    skip: skipAction,
-    tick,
-    setContext: setContextAction,
-  } = useTimerStore() as TimerStoreState;
+  const { user } = useAuth();
+  const status = useTimerStore((s) => s.status);
+  const phase_type = useTimerStore((s) => s.phase_type);
+  const phase_number = useTimerStore((s) => s.phase_number);
+  const total_phases = useTimerStore((s) => s.total_phases);
+  const remaining_seconds = useTimerStore((s) => s.remaining_seconds);
+  const elapsed_seconds = useTimerStore((s) => s.elapsed_seconds);
+  const active_project_id = useTimerStore((s) => s.active_project_id);
+  const active_task_id = useTimerStore((s) => s.active_task_id);
+  const active_session_id = useTimerStore((s) => s.active_session_id);
+  const settings = useTimerStore((s) => s.settings);
+  const playAction = useTimerStore((s) => s.play);
+  const pauseAction = useTimerStore((s) => s.pause);
+  const resetAction = useTimerStore((s) => s.reset);
+  const skipAction = useTimerStore((s) => s.skip);
+  const tick = useTimerStore((s) => s.tick);
+  const setContextAction = useTimerStore((s) => s.setContext);
+  const resetOnLogout = useTimerStore((s) => s.resetOnLogout);
+
   const workerRef = useRef<Worker | null>(null);
+  const tickRef = useRef(tick);
+  tickRef.current = tick;
+  const pendingSessionRef = useRef<Promise<string> | null>(null);
+  const sessionGenerationRef = useRef(0);
+
+  // Reset timer store on logout
+  useEffect(() => {
+    if (!user) {
+      resetOnLogout();
+    }
+  }, [user, resetOnLogout]);
 
   // Create worker once
   useEffect(() => {
     workerRef.current = new Worker(new URL('../workers/timer.worker.ts', import.meta.url));
     workerRef.current.onmessage = (e: MessageEvent) => {
       if (e.data === 'tick') {
-        tick();
+        tickRef.current();
       }
     };
     workerRef.current.onerror = (err) => {
@@ -61,7 +62,7 @@ export function useTimer() {
       workerRef.current?.terminate();
       workerRef.current = null;
     };
-  }, [tick]);
+  }, []);
 
   // Sync worker with store status
   useEffect(() => {
@@ -74,10 +75,11 @@ export function useTimer() {
 
   // Create session when entering running without one
   useEffect(() => {
-    if (status !== 'running' || active_session_id) return;
+    if (status !== 'running' || active_session_id || !user) return;
 
     const state = useTimerStore.getState();
-    createSession({
+    const myGeneration = ++sessionGenerationRef.current;
+    const promise = createSession(user.uid, {
       project_id: state.active_project_id,
       task_id: state.active_task_id,
       type: state.phase_type,
@@ -87,25 +89,43 @@ export function useTimer() {
       completed: false,
     })
       .then((session) => {
+        if (sessionGenerationRef.current !== myGeneration) {
+          // Timer was reset before session creation resolved — clean up
+          deleteSession(user.uid, session.id).catch(() => {});
+          return session.id;
+        }
         useTimerStore.getState().setActiveSessionId(session.id);
+        return session.id;
       })
       .catch((err) => {
         console.error('[useTimer] Failed to create session:', err);
+        return '';
       });
-  }, [status, active_session_id]);
+
+    pendingSessionRef.current = promise;
+
+    return () => {
+      if (sessionGenerationRef.current === myGeneration) {
+        sessionGenerationRef.current++;
+      }
+    };
+  }, [status, active_session_id, user]);
 
   // Complete session on phase_complete and advance
   useEffect(() => {
     if (status !== 'phase_complete') return;
+
+    // Immediately set to 'completing' to block play() from re-entering
+    useTimerStore.setState({ status: 'completing' });
 
     const completeAndAdvance = async () => {
       const state = useTimerStore.getState();
       const soundEnabled = state.settings.sound_enabled;
       const notificationsEnabled = state.settings.notifications_enabled;
 
-      if (state.active_session_id) {
+      if (state.active_session_id && user) {
         try {
-          await updateSession(state.active_session_id, {
+          await updateSession(user.uid, state.active_session_id, {
             completed: true,
             ended_at: Date.now(),
             duration_seconds: state.elapsed_seconds,
@@ -129,7 +149,7 @@ export function useTimer() {
     };
 
     completeAndAdvance();
-  }, [status]);
+  }, [status, user]);
 
   // Auto-start next phase if enabled
   useEffect(() => {
@@ -173,25 +193,37 @@ export function useTimer() {
 
   const reset = useCallback(async () => {
     playResetSound(settings.sound_enabled);
+    sessionGenerationRef.current++;
     const state = useTimerStore.getState();
-    if (state.active_session_id) {
+
+    // If there's a pending session creation, wait for it then delete
+    if (pendingSessionRef.current && !state.active_session_id && user) {
+      pendingSessionRef.current.then((id) => {
+        if (id && user) {
+          deleteSession(user.uid, id).catch(() => {});
+        }
+      });
+    }
+
+    if (state.active_session_id && user) {
       try {
-        await deleteSession(state.active_session_id);
+        await deleteSession(user.uid, state.active_session_id);
       } catch (err) {
         console.error('[useTimer] Failed to delete session on reset:', err);
       }
       useTimerStore.getState().setActiveSessionId(undefined);
     }
+    pendingSessionRef.current = null;
     resetAction();
-  }, [resetAction, settings.sound_enabled]);
+  }, [resetAction, settings.sound_enabled, user]);
 
   const skip = useCallback(async () => {
     playSkipSound(settings.sound_enabled);
     const state = useTimerStore.getState();
-    if (state.active_session_id) {
+    if (state.active_session_id && user) {
       const isFocus = state.phase_type === 'focus';
       try {
-        await updateSession(state.active_session_id, {
+        await updateSession(user.uid, state.active_session_id, {
           completed: isFocus,
           ended_at: Date.now(),
           duration_seconds: state.elapsed_seconds,
@@ -202,7 +234,7 @@ export function useTimer() {
       useTimerStore.getState().setActiveSessionId(undefined);
     }
     skipAction();
-  }, [skipAction, settings.sound_enabled]);
+  }, [skipAction, settings.sound_enabled, user]);
 
   const setContext = useCallback(
     (projectId?: string, taskId?: string) => {
@@ -231,6 +263,13 @@ export function useTimer() {
 
   // Tab title countdown
   useEffect(() => {
+    const originalTitle = document.title;
+    return () => {
+      document.title = originalTitle;
+    };
+  }, []);
+
+  useEffect(() => {
     if (status === 'running' || status === 'paused') {
       const mm = String(Math.floor(remaining_seconds / 60)).padStart(2, '0');
       const ss = String(remaining_seconds % 60).padStart(2, '0');
@@ -240,7 +279,7 @@ export function useTimer() {
           : phase_type === 'short_break'
             ? 'Short Break'
             : 'Long Break';
-      document.title = `${mm}:${ss} — ${phase}`;
+      document.title = `${mm}:${ss} — ${phase} — ClockWise`;
     } else if (status === 'session_complete') {
       document.title = 'Session Complete! — ClockWise';
     } else {
@@ -248,19 +287,20 @@ export function useTimer() {
     }
   }, [remaining_seconds, status, phase_type]);
 
-  // Ambient sound
+  // Ambient sound — only react to status and ambient-specific settings
+  const ambientSound = settings.ambient_sound;
+  const ambientVolume = settings.ambient_volume;
   useEffect(() => {
-    const { ambient_sound, ambient_volume } = settings;
-    if (ambient_sound !== 'off') {
+    if (ambientSound !== 'off') {
       if (status === 'running' || status === 'paused') {
-        playAmbient(ambient_sound, ambient_volume);
+        playAmbient(ambientSound, ambientVolume);
       } else if (status === 'idle' || status === 'session_complete') {
         stopAmbient();
       }
     } else {
       stopAmbient();
     }
-  }, [status, settings, settings.ambient_sound, settings.ambient_volume]);
+  }, [status, ambientSound, ambientVolume]);
 
   // Keyboard shortcuts
   useEffect(() => {

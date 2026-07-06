@@ -7,7 +7,7 @@ interface TemplateFormProps {
   open: boolean;
   template?: TimerTemplate | null;
   onClose: () => void;
-  onSave: (data: Omit<TimerTemplate, 'id' | 'created_at'>) => void;
+  onSave: (data: Omit<TimerTemplate, 'id' | 'created_at' | 'user_id'>) => void;
 }
 
 export function TemplateForm({ open, template, onClose, onSave }: TemplateFormProps) {

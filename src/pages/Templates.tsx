@@ -30,7 +30,7 @@ export function TemplatesPage() {
     navigate('/timer');
   };
 
-  const handleSave = (data: Omit<TimerTemplate, 'id' | 'created_at'>) => {
+  const handleSave = (data: Omit<TimerTemplate, 'id' | 'created_at' | 'user_id'>) => {
     if (editingTemplate) {
       editTemplate(editingTemplate.id, data);
       addToast('Template updated', 'success');

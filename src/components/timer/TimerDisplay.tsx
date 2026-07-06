@@ -27,7 +27,7 @@ function AnalogTimerFace({
   const secondAngle = (remainingSeconds % 60) * 6 - 90;
 
   return (
-    <div className="relative w-[180px] h-[180px] sm:w-[200px] sm:h-[200px] md:w-[240px] md:h-[240px] lg:w-[280px] lg:h-[280px] xl:w-[320px] xl:h-[320px] 2xl:w-[360px] 2xl:h-[360px]">
+    <div className="relative w-[180px] h-[180px] sm:w-[200px] sm:h-[200px] md:w-[240px] md:h-[240px] lg:w-[280px] lg:h-[280px] xl:w-[320px] xl:h-[320px] 2xl:w-[360px] 2xl:h-[360px] 3xl:w-[420px] 3xl:h-[420px] 4xl:w-[480px] 4xl:h-[480px]">
       <svg viewBox="0 0 200 200" className="w-full h-full">
         <circle
           cx="100"
@@ -148,7 +148,7 @@ function ClockFace({
   const secondAngle = seconds * 6; // 6 deg per second
 
   return (
-    <div className="relative w-[180px] h-[180px] sm:w-[200px] sm:h-[200px] md:w-[240px] md:h-[240px] lg:w-[280px] lg:h-[280px] xl:w-[320px] xl:h-[320px] 2xl:w-[360px] 2xl:h-[360px]">
+    <div className="relative w-[180px] h-[180px] sm:w-[200px] sm:h-[200px] md:w-[240px] md:h-[240px] lg:w-[280px] lg:h-[280px] xl:w-[320px] xl:h-[320px] 2xl:w-[360px] 2xl:h-[360px] 3xl:w-[420px] 3xl:h-[420px] 4xl:w-[480px] 4xl:h-[480px]">
       <svg viewBox="0 0 200 200" className="w-full h-full">
         {/* Outer ring (background) */}
         <circle
@@ -266,7 +266,7 @@ export const TimerDisplay = memo(function TimerDisplay({
     return (
       <div className={cn('flex flex-col items-center gap-4', className)}>
         <ClockFace remainingSeconds={remainingSeconds} totalSeconds={totalSeconds} />
-        <div className="font-display font-bold italic text-text-base text-2xl sm:text-3xl md:text-4xl tabular-nums">
+        <div className="font-display font-bold italic text-text-base text-2xl sm:text-3xl md:text-4xl 3xl:text-5xl tabular-nums">
           {formatted}
         </div>
       </div>
@@ -288,12 +288,12 @@ export const TimerDisplay = memo(function TimerDisplay({
     <div
       className={cn(
         'flex items-center font-display font-black italic tabular-nums select-none',
-        'text-[64px] sm:text-[80px] md:text-[100px] lg:text-[120px] xl:text-[140px] 2xl:text-[160px] leading-none',
+        'text-[64px] sm:text-[80px] md:text-[100px] lg:text-[120px] xl:text-[140px] 2xl:text-[160px] 3xl:text-[190px] 4xl:text-[220px] leading-none',
         className
       )}
     >
       <span className="text-[--text-primary]">{mm}</span>
-      <span className="text-[--color-brand] mx-2 lg:mx-4">:</span>
+      <span className="text-[--color-brand] mx-2 lg:mx-4 3xl:mx-5">:</span>
       <span className="text-[--text-primary]">{ss}</span>
     </div>
   );

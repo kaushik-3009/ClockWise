@@ -15,6 +15,8 @@ const FOCUSABLE_SELECTOR =
 
 export function Modal({ open, onClose, title, children, className }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
@@ -32,7 +34,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -54,7 +56,11 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open, onClose]);
+    // Only re-run when the modal opens/closes — not when callers pass a fresh
+    // `onClose` identity each render (e.g. an inline arrow function), which
+    // would otherwise re-focus the first element on every parent re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   if (!open) return null;
 
@@ -70,12 +76,12 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
         aria-modal="true"
         tabIndex={-1}
         className={cn(
-          'relative bg-bg-card rounded-lg p-8 w-full max-w-[480px] max-h-[90vh] overflow-y-auto outline-none',
+          'relative bg-bg-card rounded-lg p-8 w-full max-w-[480px] max-h-[90vh] flex flex-col outline-none',
           'animate-[slideUp_200ms_cubic-bezier(0.34,1.56,0.64,1)]',
           className
         )}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 shrink-0">
           <h2 className="text-lg font-bold text-text-base">{title}</h2>
           <button
             onClick={onClose}
@@ -85,7 +91,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
             <X className="w-5 h-5" />
           </button>
         </div>
-        {children}
+        <div className="themed-scroll overflow-y-auto min-h-0 pr-2 -mr-2 pb-1">{children}</div>
       </div>
     </div>
   );

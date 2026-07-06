@@ -31,7 +31,7 @@ function HeatmapMock() {
 
 export function LandingPage() {
   return (
-    <div className="min-h-screen bg-bg-primary text-text-primary">
+    <div className="min-h-screen bg-bg-primary text-text-base">
       {/* Nav */}
       <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between h-16 px-6 sm:px-8 bg-bg-primary/80 backdrop-blur-md">
         <Link to="/" className="font-display font-black italic text-2xl text-brand tracking-tight">
@@ -63,7 +63,7 @@ export function LandingPage() {
       <section className="flex flex-col items-center justify-center px-6 pt-28 pb-16 text-center">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-border-base text-xs font-semibold text-text-sub mb-8">
           <span className="w-2 h-2 rounded-full bg-brand" />
-          Open source &middot; No account required
+          Open source &middot; Synced across devices
         </div>
 
         <h1 className="font-display font-black italic text-[clamp(64px,12vw,140px)] leading-[0.9] tracking-tight mb-6">
@@ -73,8 +73,8 @@ export function LandingPage() {
         </h1>
 
         <p className="max-w-md text-base text-text-sub leading-relaxed mb-10">
-          A minimal Pomodoro timer with project tracking and analytics. No sign-up, no cloud, no
-          distractions. Your data stays in your browser.
+          A minimal Pomodoro timer with project tracking and analytics. Sign in to sync your data
+          across devices. No distractions, just focus.
         </p>
 
         <div className="flex flex-wrap gap-3 justify-center mb-16">
@@ -86,7 +86,7 @@ export function LandingPage() {
           </Link>
           <a
             href="#features"
-            className="inline-flex items-center gap-2 px-7 py-3.5 border border-border-base text-text-primary text-[15px] font-semibold rounded-xl hover:bg-bg-secondary transition-colors"
+            className="inline-flex items-center gap-2 px-7 py-3.5 border border-border-base text-text-base text-[15px] font-semibold rounded-xl hover:bg-bg-secondary transition-colors"
           >
             See Features
           </a>
@@ -157,8 +157,8 @@ export function LandingPage() {
               },
               {
                 icon: <Zap className="w-5 h-5" />,
-                title: 'Offline PWA',
-                desc: 'Installable on desktop and mobile. Works entirely offline. All data stored locally in your browser.',
+                title: 'Cloud Sync',
+                desc: 'Your data syncs instantly via Firebase. Sign in from any device to pick up where you left off.',
               },
             ].map((f, i) => (
               <div
@@ -230,7 +230,7 @@ export function LandingPage() {
           <span className="text-brand">Start doing.</span>
         </h2>
         <p className="max-w-md mx-auto text-base text-text-sub mb-10">
-          No sign-up. No downloads. Open the page and start your first focus session right now.
+          Create a free account and start your first focus session right now.
         </p>
         <Link
           to="/timer"
@@ -242,7 +242,7 @@ export function LandingPage() {
 
       {/* Footer */}
       <footer className="py-8 px-6 text-center text-[13px] text-text-muted">
-        ClockWise &middot; Built with React, TypeScript &amp; Dexie.js
+        ClockWise &middot; Built with React, TypeScript &amp; Firebase
       </footer>
     </div>
   );

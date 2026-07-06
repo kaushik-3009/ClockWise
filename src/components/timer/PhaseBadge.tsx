@@ -9,7 +9,7 @@ interface PhaseBadgeProps {
 }
 
 export function PhaseBadge({ current, total, className }: PhaseBadgeProps) {
-  const { settings } = useTimerStore();
+  const settings = useTimerStore((s) => s.settings);
 
   const nextPhaseLabel = useMemo(() => {
     if (current >= total) return null;
@@ -25,8 +25,8 @@ export function PhaseBadge({ current, total, className }: PhaseBadgeProps) {
     <div className="flex flex-col items-center gap-1.5">
       <div
         className={
-          'inline-flex items-center justify-center h-8 px-4 rounded-full ' +
-          'bg-brand text-white text-[13px] font-bold ' +
+          'inline-flex items-center justify-center h-8 3xl:h-9 px-4 3xl:px-5 rounded-full ' +
+          'bg-brand text-white text-[13px] 3xl:text-sm font-bold ' +
           'animate-[badge-pop_400ms_cubic-bezier(0.34,1.56,0.64,1)] ' +
           className
         }
@@ -34,7 +34,7 @@ export function PhaseBadge({ current, total, className }: PhaseBadgeProps) {
         Phase {current}/{total}
       </div>
       {nextPhaseLabel && (
-        <span className="text-[10px] font-medium text-text-sub tracking-wide uppercase">
+        <span className="text-[10px] 3xl:text-xs font-medium text-text-sub tracking-wide uppercase">
           {nextPhaseLabel}
         </span>
       )}

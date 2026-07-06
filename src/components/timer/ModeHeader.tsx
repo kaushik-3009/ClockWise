@@ -16,11 +16,11 @@ export function ModeHeader({ phaseType, className }: ModeHeaderProps) {
 
   return (
     <div className={`flex flex-col items-center gap-1 ${className}`}>
-      <span className="text-sm font-bold tracking-[0.15em] uppercase text-text-base">
+      <span className="text-sm 3xl:text-base font-bold tracking-[0.15em] uppercase text-text-base">
         {mode.title}
       </span>
       {mode.subtitle && (
-        <span className="text-[11px] font-medium tracking-[0.12em] uppercase text-text-sub">
+        <span className="text-[11px] 3xl:text-xs font-medium tracking-[0.12em] uppercase text-text-sub">
           {mode.subtitle}
         </span>
       )}

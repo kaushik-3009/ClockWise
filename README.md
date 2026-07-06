@@ -2,9 +2,9 @@
 
 # ClockWise
 
-**A minimal Pomodoro timer with project tracking and analytics.**
+**A Pomodoro timer with project tracking, analytics, and cross-device sync.**
 
-No sign-up. No cloud. No distractions. Your data stays in your browser.
+Sign in, focus, and see exactly where your time goes — from any device.
 
 [![CI](https://github.com/user/clockwise/actions/workflows/ci.yml/badge.svg)](https://github.com/user/clockwise/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue.svg)](https://www.typescriptlang.org/)
@@ -16,19 +16,22 @@ No sign-up. No cloud. No distractions. Your data stays in your browser.
 
 ## What it does
 
-ClockWise is a Pomodoro focus timer that automatically tracks where your time goes. Pick a project, start the timer, and every second is logged — no manual entry. Over time, heatmaps, trend charts, and streak tracking show you exactly how you spend your focus hours.
+ClockWise is a Pomodoro focus timer that automatically tracks where your time goes. Pick a project (or task), start the timer, and every second is logged — no manual entry. Over time, heatmaps, trend charts, and streak tracking show you exactly how you spend your focus hours. Data syncs across devices via Firebase and is fully usable offline.
 
 **Key features:**
 
-- **Pomodoro timer** with configurable focus/break phases and three display modes (digital, analog, clock)
-- **Project & task tracking** — organize work into color-coded projects, assign tasks
-- **Analytics dashboard** — heatmaps, trend charts, session breakdowns, weekday analysis
-- **Ambient sounds** — rain, white noise, brown noise, cafe (generated via Web Audio API, no files)
+- **Pomodoro timer** with configurable focus/break phases, three display modes (digital, analog, clock), and keyboard shortcuts (Space, R, S, Esc)
+- **Project & task tracking** — organize work into color-coded projects, assign tasks, or create either inline from the "I'm focusing on…" picker without leaving the timer
+- **Quick context switch mid-session** — reassign the running timer to a different project/task without pausing or losing progress
+- **Analytics dashboard** — heatmaps, trend charts, session breakdowns, weekday/time-of-day analysis
+- **Ambient sounds** — rain, white noise, brown noise, cafe — real looping audio files, with a shared Web Audio context for UI sound effects
 - **Templates** — save and switch timer configurations (Classic Pomodoro, Deep Work, Quick Sprint)
 - **Streak tracking** — daily goals, streak counting, consistency scoring
-- **Offline PWA** — installable, works without internet, all data in IndexedDB
+- **Accounts + cross-device sync** — Firebase Authentication (email/password, password reset) with per-user Firestore data
+- **Offline-first** — Firestore persistent local cache with multi-tab support, plus an offline banner when the network drops; installable PWA
 - **Data export** — JSON and CSV export with auto-backup
-- **Dark mode** — full theme support via CSS custom properties
+- **Responsive layout** — scales up through custom `3xl`/`4xl` Tailwind breakpoints for large and ultra-wide monitors
+- **Dark mode** — full theme support via CSS custom properties, themed scrollbars
 
 ---
 
@@ -36,9 +39,9 @@ ClockWise is a Pomodoro focus timer that automatically tracks where your time go
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  React 18 + TypeScript (strict)                         │
+│  React 18 + TypeScript (strict) + React Router          │
 │  ┌──────────┐   ┌──────────┐   ┌──────────┐             │
-│  │  Timer   │   │ Projects │   │  Stats   │  ...pages   │
+│  │  Timer   │   │ Projects │   │ Insights │  ...pages   │
 │  └────┬─────┘   └────┬─────┘   └────┬─────┘             │
 │       │              │              │                   │
 │  ┌────┴──────────────┴──────────────┴────┐              │
@@ -51,11 +54,13 @@ ClockWise is a Pomodoro focus timer that automatically tracks where your time go
 │  │         Web Worker (timer.worker)     │              │
 │  │   setInterval → postMessage('tick')   │              │
 │  └───────────────────────────────────────┘              │
-│                                                         │
+│                                                          │
 │  ┌────────────────────────────────────────┐             │
-│  │           Dexie.js (IndexedDB)         │             │
-│  │  projects │ tasks │ sessions │ streaks │             │
-│  │    settings │ templates │ backups      │             │
+│  │      Firebase Auth + Firestore         │             │
+│  │  users/{uid}/{projects,tasks,sessions, │             │
+│  │   streaks,settings,templates,backups}  │             │
+│  │  persistentLocalCache (offline, multi- │             │
+│  │  tab) via initializeFirestore          │             │
 │  └────────────────────────────────────────┘             │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -65,10 +70,12 @@ ClockWise is a Pomodoro focus timer that automatically tracks where your time go
 | Decision | Why |
 |---|---|
 | Web Worker for timer | `setInterval` on the main thread drifts when the tab is throttled. The worker keeps ticking accurately. |
-| IndexedDB over localStorage | localStorage is synchronous and has a 5-10MB quota. IndexedDB is async, unlimited, and supports indexes. |
-| Zustand over Context | Timer ticks 60 times/minute. Zustand's selector pattern prevents unnecessary re-renders. |
+| Firestore over a custom backend | Per-user subcollections give free auth-scoped security rules, live `onSnapshot` sync, and offline persistence out of the box. |
+| `initializeFirestore` + `persistentLocalCache` | Firestore's default cache doesn't survive across tabs. `persistentMultipleTabManager` keeps writes consistent when the app is open in more than one tab. |
+| Generation-counter cancellation in `useTimer` | A plain boolean `cancelledRef` can't distinguish "this reset cancelled effect run #1" from "a new run #2 already started" — a monotonically increasing generation counter can. Prevents orphaned session documents on rapid reset→play→reset. |
+| Zustand over Context | Timer ticks 60 times/minute. Zustand's selector pattern (`useStore(s => s.field)`) prevents unnecessary re-renders on every tick. |
 | CSS variables over Tailwind `dark:` | CSS variables override cleanly via `[data-theme="dark"]`. Tailwind's variant doesn't compose well with dynamic themes. |
-| Web Audio API for sounds | No external audio files to download or host. Generated programmatically, works offline. |
+| Real audio files for ambient sound, Web Audio API for effects | Looping ambient tracks (rain, cafe, etc.) sound better as authored audio than synthesized noise; short UI sounds (click, chime) stay synthesized and share one `AudioContext`. |
 | Recharts with custom tooltips | Default Recharts tooltip text inherits bar fill color, making light bars invisible in light mode. Custom HTML tooltips fix this. |
 
 ---
@@ -82,6 +89,9 @@ cd clockwise
 
 # Install
 npm install
+
+# Configure Firebase — copy and fill in your project's config
+cp .env.example .env.local
 
 # Develop
 npm run dev
@@ -114,19 +124,21 @@ npm test
 src/
   components/
     ui/           Modal, Toast, ConfirmDialog, SettingsModal, Skeleton, ErrorBoundary
-    layout/       AppShell, Sidebar, BottomNav
-    timer/        TimerDisplay, TimerControls, PhaseBadge, FocusingOnBar, TemplateSelector
+    layout/       AppShell, Sidebar, BottomNav, OfflineBanner
+    auth/         ProtectedRoute
+    timer/        TimerDisplay, TimerControls, PhaseBadge, FocusingOnBar, TaskPicker, TemplateSelector
     projects/     ProjectCard, TaskRow, ProjectForm, TaskForm
     stats/        HeatmapCalendar, FocusTimeChart, SessionsChart, TrendChart, StatCard
     insights/     DaytimeChart, WeekdayChart, FocusDistribution
-  hooks/          useTimer, useProjects, useTasks, useSessions, useSettings, useTemplates
+  hooks/          useTimer, useProjects, useTasks, useSessions, useSettings, useTemplates, useOnlineStatus
   stores/         timerStore (Zustand), uiStore (Zustand + persist)
-  db/             schema.ts (Dexie v3), queries/, seed.ts
+  db/             queries/ (Firestore reads/writes per collection), seed.ts
   workers/        timer.worker.ts (Web Worker)
-  lib/            time.ts, phases.ts, stats.ts, sounds.ts, ambient.ts, streaks.ts, exportImport.ts
+  lib/            firebase.ts, auth.tsx, time.ts, phases.ts, stats.ts, sounds.ts, ambient.ts, streaks.ts, exportImport.ts
   types/          index.ts (canonical types)
-  pages/          Timer, Statistics, Projects, ProjectDetail, Tasks, History, Streaks, Insights, Templates
+  pages/          Timer, Login, Signup, Statistics, Projects, ProjectDetail, Tasks, History, Streaks, Insights, Templates
 public/
+  sounds/         Ambient audio files (rain, white noise, brown noise, cafe — see sounds/README.md)
   landing.html    Product landing page
 .github/
   workflows/      CI pipeline
@@ -143,30 +155,28 @@ npm run test:watch  # Watch mode
 
 **Coverage:**
 
-- Unit tests: `time.ts`, `phases.ts`, `stats.ts`, `streaks.ts`
+- Unit tests: `stats.ts`, `streaks.ts`, `exportImport.ts`
 - Store tests: `timerStore.ts`
-- DB query tests: sessions, projects, tasks
-- Integration tests: `useTimer` hook with IndexedDB
-- Export/import validation tests
-- 82 tests across 10 test files
+- 50 tests across 6 test files
 
 ---
 
-## Data storage
+## Data storage & sync
 
-Everything is local. No server, no API, no account.
+Data lives in Firestore under a per-user subcollection tree (`users/{uid}/...`), so it's private by default and available on any device you sign into.
 
 ```
-Browser
-├── IndexedDB (Dexie.js)
-│   ├── projects, tasks, sessions, streaks
-│   ├── settings, templates
-│   └── backups (auto-backup snapshots)
-└── localStorage
-    └── uiStore (theme, sidebar state)
+Firestore (users/{uid}/)
+├── projects, tasks, sessions, streaks
+├── settings, templates
+└── backups (auto-backup snapshots)
+
+Local (per browser)
+├── Firestore persistentLocalCache — offline reads/writes, synced when back online
+└── localStorage — uiStore (theme, sidebar state)
 ```
 
-- IndexedDB persists across browser restarts
+- Firestore's persistent local cache means the app keeps working offline; writes queue and sync once you're back online (surfaced via the offline banner)
 - Auto-backup saves a full snapshot on every session completion
 - Export to JSON or CSV at any time
 
@@ -177,11 +187,17 @@ Browser
 **Web Worker timer with drift compensation**
 The timer runs in a Web Worker using `setInterval`. The worker sends `'tick'` messages to the main thread, which updates the Zustand store. This keeps the timer accurate even when the tab is throttled (browsers throttle `setInterval` on background tabs to save battery).
 
+**Firestore offline persistence**
+`initializeFirestore` is configured with `persistentLocalCache({ tabManager: persistentMultipleTabManager() })` so reads/writes work offline and stay consistent if the app is open in multiple tabs. An `useOnlineStatus` hook + `OfflineBanner` component surface connectivity state to the user.
+
+**Race-safe session lifecycle**
+Session documents are created in Firestore when a phase starts running. A monotonically increasing generation counter (rather than a single boolean flag) tracks which effect run is "current," so a fast reset → play → reset sequence can't leave an orphaned session document behind or apply a stale session ID.
+
 **CSS variables in SVG**
 Recharts renders inline SVG. CSS custom properties (`var(--color-brand)`) don't resolve inside SVG elements. The chart components detect the current theme via JavaScript and apply hex colors directly to SVG attributes.
 
-**Web Audio API ambient sounds**
-Rain, white noise, brown noise, and cafe sounds are generated programmatically using Web Audio API buffers. No external audio files. iOS Safari requires a user interaction before `AudioContext` can play — handled with a first-click unlock. These are currently imperfect but will be improved soon.
+**Ambient sound + effects split**
+Looping ambient tracks (rain, white noise, brown noise, cafe) play as real audio files via `HTMLAudioElement`, swapped without an audible gap when only the volume changes. Short UI sound effects (click, chime, warning) stay synthesized via a shared `AudioContext` so there's no duplicate audio-file overhead for one-shot sounds.
 
 **Import validation without Zod**
 Data imports are validated with TypeScript type guards. Every field of every entity type is checked for correct type, range, and enum membership. Hex color format is validated with regex. No schema library dependency.

@@ -1,52 +1,61 @@
-import { useLiveQuery } from 'dexie-react-hooks';
-import { useCallback, useEffect } from 'react';
-import { db } from '@/db/schema';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { getFirebaseFirestore } from '@/lib/firebase';
+import { useAuth } from '@/lib/useAuth';
+import { DEFAULT_SETTINGS } from '@/db/queries/settings';
 import type { TimerSettings } from '@/types';
 import { useTimerStore } from '@/stores/timerStore';
 
-export const DEFAULT_SETTINGS: TimerSettings = {
-  focus_minutes: 25,
-  short_break_minutes: 5,
-  long_break_minutes: 15,
-  phases_per_session: 8,
-  long_break_after_n: 4,
-  auto_start: false,
-  sound_enabled: true,
-  notifications_enabled: false,
-  timer_style: 'digital',
-  accent_color: '#E8521A',
-  ambient_sound: 'off',
-  ambient_volume: 0.3,
-  weekly_goal_hours: 20,
-  warn_before_seconds: 60,
-};
+const SETTINGS_DOC_ID = 'default';
 
 export function useSettings() {
-  const stored = useLiveQuery(() => db.settings.get(1), []);
+  const { user } = useAuth();
+  const [settings, setSettingsState] = useState<TimerSettings>(DEFAULT_SETTINGS);
+  const [loading, setLoading] = useState(true);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
 
-  const settings = stored ?? DEFAULT_SETTINGS;
-
-  // Sync loaded settings into timer store and apply accent color
   useEffect(() => {
-    if (stored) {
-      useTimerStore.getState().setSettings(stored);
-      if (/^#[0-9a-fA-F]{6}$/.test(stored.accent_color)) {
-        document.documentElement.style.setProperty('--color-brand', stored.accent_color);
-      }
+    if (!user) {
+      setSettingsState(DEFAULT_SETTINGS);
+      setLoading(false);
+      return;
     }
-  }, [stored]);
+
+    setLoading(true);
+
+    const ref = doc(getFirebaseFirestore(), 'users', user.uid, 'settings', SETTINGS_DOC_ID);
+    return onSnapshot(
+      ref,
+      (snapshot) => {
+        const next = snapshot.exists() ? (snapshot.data() as TimerSettings) : DEFAULT_SETTINGS;
+        setSettingsState(next);
+        useTimerStore.getState().setSettings(next);
+        if (/^#[0-9a-fA-F]{6}$/.test(next.accent_color)) {
+          document.documentElement.style.setProperty('--color-brand', next.accent_color);
+        }
+        setLoading(false);
+      },
+      (error) => {
+        console.error('[useSettings] Snapshot error:', error);
+      }
+    );
+  }, [user]);
 
   const saveSettings = useCallback(
     async (partial: Partial<TimerSettings>) => {
-      const next = { ...settings, ...partial };
-      await db.settings.put({ ...next, id: 1 });
+      if (!user) throw new Error('Not authenticated');
+      const next = { ...settingsRef.current, ...partial };
+      const ref = doc(getFirebaseFirestore(), 'users', user.uid, 'settings', SETTINGS_DOC_ID);
+      await setDoc(ref, next);
       useTimerStore.getState().setSettings(partial);
     },
-    [settings]
+    [user]
   );
 
   return {
     settings,
+    loading,
     saveSettings,
   };
 }

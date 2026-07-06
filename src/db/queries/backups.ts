@@ -1,22 +1,21 @@
-import { db } from '../schema';
-import type { BackupRecord, ExportData } from '@/types';
+import type { ExportData, BackupRecord } from '@/types';
 
-const AUTO_BACKUP_ID = 'auto';
+// Backups are redundant with Firestore persistence. These functions are kept
+// as no-ops to preserve the existing API surface while we rely on Firestore
+// for durable storage.
 
 export async function getAutoBackup(): Promise<ExportData | null> {
-  const record = await db.backups.get(AUTO_BACKUP_ID);
-  return record?.data ?? null;
+  return null;
 }
 
-export async function saveAutoBackup(data: ExportData): Promise<void> {
-  const record: BackupRecord = {
-    id: AUTO_BACKUP_ID,
-    data,
-    created_at: Date.now(),
-  };
-  await db.backups.put(record);
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function saveAutoBackup(_data: ExportData): Promise<void> {
+  // no-op: Firestore is the source of truth.
 }
 
 export async function deleteAutoBackup(): Promise<void> {
-  await db.backups.delete(AUTO_BACKUP_ID);
+  // no-op.
 }
+
+// Re-export the BackupRecord type so consumers that reference it still compile.
+export type { BackupRecord };
