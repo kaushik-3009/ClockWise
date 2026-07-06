@@ -6,7 +6,7 @@
 
 Sign in, focus, and see exactly where your time goes — from any device.
 
-[![CI](https://github.com/user/clockwise/actions/workflows/ci.yml/badge.svg)](https://github.com/user/clockwise/actions/workflows/ci.yml)
+[![CI](https://github.com/kaushik-3009/ClockWise/actions/workflows/ci.yml/badge.svg)](https://github.com/kaushik-3009/ClockWise/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue.svg)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -32,6 +32,18 @@ ClockWise is a Pomodoro focus timer that automatically tracks where your time go
 - **Data export** — JSON and CSV export with auto-backup
 - **Responsive layout** — scales up through custom `3xl`/`4xl` Tailwind breakpoints for large and ultra-wide monitors
 - **Dark mode** — full theme support via CSS custom properties, themed scrollbars
+
+---
+
+## Routing & auth flow
+
+| Route | Who sees it | Behavior |
+|---|---|---|
+| `/` | Everyone | Landing page for signed-out users; signed-in users are redirected straight to `/timer` |
+| `/login`, `/signup` | Signed-out users | Signed-in users are redirected to `/timer` |
+| `/timer`, `/statistics`, `/projects`, … | Signed-in users only | `ProtectedRoute` redirects signed-out users back to `/` |
+
+Every CTA on the landing page ("Start Focusing", "Open App", "View Your Stats") routes through `/login` rather than assuming an active session — clicking through as a signed-out visitor lands on the login screen, and a successful login drops you into `/timer`. Logging out sends you back to `/`, not a dead end.
 
 ---
 
@@ -84,8 +96,8 @@ ClockWise is a Pomodoro focus timer that automatically tracks where your time go
 
 ```bash
 # Clone
-git clone https://github.com/user/clockwise.git
-cd clockwise
+git clone https://github.com/kaushik-3009/ClockWise.git
+cd ClockWise
 
 # Install
 npm install
@@ -154,7 +166,7 @@ npm run test:watch  # Watch mode
 
 **Coverage:**
 
-- Unit tests: `stats.ts`, `streaks.ts`, `exportImport.ts`
+- Unit tests: `time.ts`, `phases.ts`, `stats.ts`, `streaks.ts`, `exportImport.ts`
 - Store tests: `timerStore.ts`
 - 50 tests across 6 test files
 

@@ -51,7 +51,7 @@ export function LandingPage() {
             Analytics
           </a>
           <Link
-            to="/timer"
+            to="/login"
             className="px-5 py-2 bg-brand text-white text-sm font-semibold rounded-lg hover:bg-brand-hover transition-colors"
           >
             Open App
@@ -79,7 +79,7 @@ export function LandingPage() {
 
         <div className="flex flex-wrap gap-3 justify-center mb-16">
           <Link
-            to="/timer"
+            to="/login"
             className="inline-flex items-center gap-2 px-7 py-3.5 bg-brand text-white text-[15px] font-semibold rounded-xl hover:bg-brand-hover transition-colors"
           >
             Start Focusing <span>&rarr;</span>
@@ -190,7 +190,7 @@ export function LandingPage() {
               &mdash; just data.
             </p>
             <Link
-              to="/timer"
+              to="/login"
               className="inline-flex items-center gap-2 px-7 py-3.5 bg-brand text-white text-[15px] font-semibold rounded-xl hover:bg-brand-hover transition-colors"
             >
               View Your Stats &rarr;
@@ -233,7 +233,7 @@ export function LandingPage() {
           Create a free account and start your first focus session right now.
         </p>
         <Link
-          to="/timer"
+          to="/login"
           className="inline-flex items-center gap-2 px-7 py-3.5 bg-brand text-white text-[15px] font-semibold rounded-xl hover:bg-brand-hover transition-colors"
         >
           Open ClockWise &rarr;
