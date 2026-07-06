@@ -2,14 +2,14 @@
 
 # ClockWise
 
-**A Pomodoro timer that tracks where your focus time actually goes, synced across devices.**
+**A minimalist Pomodoro timer that tracks where your focus time actually goes, synced across devices.**
 
 [![CI](https://github.com/kaushik-3009/ClockWise/actions/workflows/ci.yml/badge.svg)](https://github.com/kaushik-3009/ClockWise/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue.svg)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PWA](https://img.shields.io/badge/PWA-installable-purple.svg)](https://web.dev/progressive-web-apps/)
 
-[Live Demo](https://your-demo-url.here) · [Report a Bug](https://github.com/kaushik-3009/ClockWise/issues) · [Request a Feature](https://github.com/kaushik-3009/ClockWise/issues)
+[Live Demo](https://clock-wise-nine.vercel.app/) · [Report a Bug](https://github.com/kaushik-3009/ClockWise/issues) · [Request a Feature](https://github.com/kaushik-3009/ClockWise/issues)
 
 </div>
 
@@ -17,9 +17,9 @@
 
 ## Why
 
-Every Pomodoro app I tried was either covered in ads or locked the useful stuff behind a paywall. Heatmaps? Pro plan. Session history? Upgrade. Basic analytics? $8/month. I got tired of it and built my own.
+Every Pomodoro app I tried either spammed ads or locked basic features like session analytics and themes behind an $8/month paywall. I got tired of it and built my own clean, customizable pomodoro application with actual analytics.
 
-It started as a local-only app for personal use. Then I figured if I was building it anyway, I might as well add accounts and sync so anyone could use it. No ads, no freemium tiers, no strings attached. Pick a project, start the timer, and everything gets logged automatically. Over weeks that becomes heatmaps, streaks, and trend charts that actually answer "where did my time go this week?"
+It started as a local-only app for personal use. Then I figured if I was building it anyway, I might as well add accounts and sync so anyone could use it. No ads, freemium tiers, or strings attached. Pick a project, start the timer, and everything gets logged automatically. Over weeks that becomes heatmaps, streaks, and trend charts that answer "where did my time go this week?"
 
 ---
 
@@ -84,7 +84,7 @@ npm run dev                  # start the dev server at localhost:5173
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────┐
 │  React 18 + TypeScript (strict) + React Router           │
 │  ┌──────────┐   ┌──────────┐   ┌──────────┐              │
 │  │  Timer   │   │ Projects │   │ Insights │  ...pages    │
@@ -100,7 +100,7 @@ npm run dev                  # start the dev server at localhost:5173
 │  │        Web Worker (timer.worker)      │               │
 │  │   setInterval → postMessage('tick')   │               │
 │  └────────────────────────────────────────┘              │
-│                                                           │
+│                                                          │
 │  ┌────────────────────────────────────────┐              │
 │  │       Firebase Auth + Firestore        │              │
 │  │  users/{uid}/{projects, tasks,         │              │
@@ -109,10 +109,8 @@ npm run dev                  # start the dev server at localhost:5173
 │  │  initializeFirestore + persistent      │              │
 │  │  LocalCache -- offline, multi-tab safe │              │
 │  └────────────────────────────────────────┘              │
-└─────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────┘
 ```
-
-**Routing:** `/` is the landing page for signed-out visitors and redirects signed-in users to `/timer`. Every CTA routes through `/login` rather than assuming a session, so signed-out clicks always land somewhere real. `ProtectedRoute` redirects signed-out users hitting app routes back to `/`.
 
 ### Notable Design Decisions
 
@@ -122,7 +120,7 @@ npm run dev                  # start the dev server at localhost:5173
 - **Zustand with selectors** -- the timer ticks every second; `useStore(s => s.field)` keeps components that don't care about the tick from re-rendering on every tick.
 - **Real audio files for ambient loops, synthesized Web Audio for UI sounds** -- looping rain/cafe/noise sounds better as authored audio; short one-shot clicks/chimes are synthesized through a single shared `AudioContext` and need no audio files.
 - **Recharts with custom HTML tooltips** -- Recharts' default tooltip text inherits the bar's fill color, which makes it invisible in light mode. Custom tooltip components fix that. Chart colors are detected in JS with hex fallbacks because CSS variables don't resolve inside inline SVG.
-- **Hand-written type guards for import validation** -- every field of every entity is checked for type, range, and enum membership; no schema library dependency.
+- **Type guards for import validation** -- every field of every entity is checked for type, range, and enum membership; no schema library dependency.
 
 ---
 
