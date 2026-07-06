@@ -50,6 +50,12 @@ It started as a local-only app for personal use. Then I figured if I was buildin
 
 ---
 
+## Architecture
+
+![ClockWise Architecture Diagram](public/sys-arch.png)
+
+---
+
 ## Getting Started
 
 ### Prerequisites
@@ -80,10 +86,6 @@ npm run dev                  # start the dev server at localhost:5173
 | `npx tsc --noEmit` | Type-check only |
 
 ---
-
-## Architecture
-
-![ClockWise Architecture Diagram](public/sys-arch.png)
 
 ### Notable Design Decisions
 
