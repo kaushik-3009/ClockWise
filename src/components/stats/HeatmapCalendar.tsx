@@ -310,9 +310,7 @@ export function HeatmapCalendar() {
         </div>
       </div>
 
-      {sessions.length === 0 ? (
-        <p className="text-sm text-text-muted">No activity data yet</p>
-      ) : viewMode === 'month' ? (
+      {viewMode === 'month' ? (
         /* ── MONTHLY VIEW ─────────────────────── */
         <div className="flex flex-col items-center">
           <div className="grid grid-cols-7 gap-1.5 mb-2 w-full max-w-[500px] lg:max-w-[600px] xl:max-w-[700px]">

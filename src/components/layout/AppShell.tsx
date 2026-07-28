@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/cn';
 import { useUiStore } from '@/stores/uiStore';
@@ -20,7 +20,10 @@ export function AppShell() {
   }, [location.pathname]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-bg-primary">
+    <div
+      className="flex h-screen w-screen overflow-hidden bg-bg-primary"
+      style={{ '--sidebar-width': sidebarCollapsed ? '4rem' : '15rem' } as CSSProperties}
+    >
       {/* Desktop sidebar */}
       <aside
         className={cn(
@@ -32,10 +35,10 @@ export function AppShell() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 flex flex-col h-full overflow-y-auto overflow-x-hidden">
+      <main className="relative flex-1 flex flex-col h-full overflow-y-auto overflow-x-hidden">
         <OfflineBanner />
-        <div className="flex-1 min-h-0">
-          <div className="page" key={location.pathname}>
+        <div className="relative flex-1 min-h-0">
+          <div className="page h-full" key={location.pathname}>
             <Outlet />
           </div>
         </div>

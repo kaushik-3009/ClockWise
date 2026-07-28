@@ -21,6 +21,7 @@ export function useTimer() {
   const total_phases = useTimerStore((s) => s.total_phases);
   const remaining_seconds = useTimerStore((s) => s.remaining_seconds);
   const elapsed_seconds = useTimerStore((s) => s.elapsed_seconds);
+  const clock_now = useTimerStore((s) => s.clock_now);
   const active_project_id = useTimerStore((s) => s.active_project_id);
   const active_task_id = useTimerStore((s) => s.active_task_id);
   const active_session_id = useTimerStore((s) => s.active_session_id);
@@ -28,14 +29,16 @@ export function useTimer() {
   const playAction = useTimerStore((s) => s.play);
   const pauseAction = useTimerStore((s) => s.pause);
   const resetAction = useTimerStore((s) => s.reset);
-  const skipAction = useTimerStore((s) => s.skip);
   const tick = useTimerStore((s) => s.tick);
+  const tickClock = useTimerStore((s) => s.tickClock);
   const setContextAction = useTimerStore((s) => s.setContext);
   const resetOnLogout = useTimerStore((s) => s.resetOnLogout);
 
   const workerRef = useRef<Worker | null>(null);
   const tickRef = useRef(tick);
   tickRef.current = tick;
+  const tickClockRef = useRef(tickClock);
+  tickClockRef.current = tickClock;
   const pendingSessionRef = useRef<Promise<string> | null>(null);
   const sessionGenerationRef = useRef(0);
 
@@ -49,16 +52,20 @@ export function useTimer() {
   // Create worker once
   useEffect(() => {
     workerRef.current = new Worker(new URL('../workers/timer.worker.ts', import.meta.url));
-    workerRef.current.onmessage = (e: MessageEvent) => {
+    workerRef.current.onmessage = (e: MessageEvent<'tick' | { type: 'clock'; now: number }>) => {
       if (e.data === 'tick') {
         tickRef.current();
+      } else if (typeof e.data === 'object' && e.data.type === 'clock') {
+        tickClockRef.current(e.data.now);
       }
     };
+    workerRef.current.postMessage('clock_start');
     workerRef.current.onerror = (err) => {
       console.error('Timer worker error:', err);
     };
 
     return () => {
+      workerRef.current?.postMessage('clock_stop');
       workerRef.current?.terminate();
       workerRef.current = null;
     };
@@ -75,10 +82,10 @@ export function useTimer() {
 
   // Create session when entering running without one
   useEffect(() => {
-    if (status !== 'running' || active_session_id || !user) return;
+    if (status !== 'running' || active_session_id || pendingSessionRef.current || !user) return;
 
     const state = useTimerStore.getState();
-    const myGeneration = ++sessionGenerationRef.current;
+    const myGeneration = sessionGenerationRef.current;
     const promise = createSession(user.uid, {
       project_id: state.active_project_id,
       task_id: state.active_task_id,
@@ -103,12 +110,6 @@ export function useTimer() {
       });
 
     pendingSessionRef.current = promise;
-
-    return () => {
-      if (sessionGenerationRef.current === myGeneration) {
-        sessionGenerationRef.current++;
-      }
-    };
   }, [status, active_session_id, user]);
 
   // Complete session on phase_complete and advance
@@ -119,13 +120,18 @@ export function useTimer() {
     useTimerStore.setState({ status: 'completing' });
 
     const completeAndAdvance = async () => {
-      const state = useTimerStore.getState();
+      let state = useTimerStore.getState();
       const soundEnabled = state.settings.sound_enabled;
       const notificationsEnabled = state.settings.notifications_enabled;
 
-      if (state.active_session_id && user) {
+      const sessionId =
+        state.active_session_id ??
+        (pendingSessionRef.current ? await pendingSessionRef.current : '');
+
+      state = useTimerStore.getState();
+      if (sessionId && user) {
         try {
-          await updateSession(user.uid, state.active_session_id, {
+          await updateSession(user.uid, sessionId, {
             completed: true,
             ended_at: Date.now(),
             duration_seconds: state.elapsed_seconds,
@@ -133,7 +139,9 @@ export function useTimer() {
         } catch (err) {
           console.error('[useTimer] Failed to complete session:', err);
         }
+        sessionGenerationRef.current++;
         useTimerStore.getState().setActiveSessionId(undefined);
+        pendingSessionRef.current = null;
       }
 
       playTimerCompleteSound(soundEnabled);
@@ -196,15 +204,6 @@ export function useTimer() {
     sessionGenerationRef.current++;
     const state = useTimerStore.getState();
 
-    // If there's a pending session creation, wait for it then delete
-    if (pendingSessionRef.current && !state.active_session_id && user) {
-      pendingSessionRef.current.then((id) => {
-        if (id && user) {
-          deleteSession(user.uid, id).catch(() => {});
-        }
-      });
-    }
-
     if (state.active_session_id && user) {
       try {
         await deleteSession(user.uid, state.active_session_id);
@@ -219,11 +218,20 @@ export function useTimer() {
 
   const skip = useCallback(async () => {
     playSkipSound(settings.sound_enabled);
-    const state = useTimerStore.getState();
-    if (state.active_session_id && user) {
+    let state = useTimerStore.getState();
+    if (state.status === 'idle' || state.status === 'session_complete') return;
+
+    // Stop the worker before awaiting a slow session creation so it cannot
+    // transition the timer into phase_complete during a user-initiated skip.
+    useTimerStore.setState({ status: 'completing' });
+    const sessionId =
+      state.active_session_id ?? (pendingSessionRef.current ? await pendingSessionRef.current : '');
+    state = useTimerStore.getState();
+
+    if (sessionId && user) {
       const isFocus = state.phase_type === 'focus';
       try {
-        await updateSession(user.uid, state.active_session_id, {
+        await updateSession(user.uid, sessionId, {
           completed: isFocus,
           ended_at: Date.now(),
           duration_seconds: state.elapsed_seconds,
@@ -231,10 +239,12 @@ export function useTimer() {
       } catch (err) {
         console.error('[useTimer] Failed to update session on skip:', err);
       }
+      sessionGenerationRef.current++;
       useTimerStore.getState().setActiveSessionId(undefined);
+      pendingSessionRef.current = null;
     }
-    skipAction();
-  }, [skipAction, settings.sound_enabled, user]);
+    useTimerStore.getState().advancePhase();
+  }, [settings.sound_enabled, user]);
 
   const setContext = useCallback(
     (projectId?: string, taskId?: string) => {
@@ -350,6 +360,7 @@ export function useTimer() {
     total_phases,
     remaining_seconds,
     elapsed_seconds,
+    clock_now,
     active_project_id,
     active_task_id,
     settings,

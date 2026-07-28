@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useUiStore } from '@/stores/uiStore';
 import { useTimer } from '@/hooks/useTimer';
 import { useProjects } from '@/hooks/useProjects';
 import { useTasks } from '@/hooks/useTasks';
@@ -10,9 +11,11 @@ import { FocusingOnBar } from '@/components/timer/FocusingOnBar';
 import { TemplateSelector } from '@/components/timer/TemplateSelector';
 import { SessionCompleteOverlay } from '@/components/timer/SessionCompleteOverlay';
 import { ShortcutsModal } from '@/components/ui/ShortcutsModal';
+import { MusicPlayer } from '@/components/timer/MusicPlayer';
 import { PROJECT_COLORS } from '@/lib/constants';
 
 export function TimerPage() {
+  const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed);
   const {
     status,
     phase_type,
@@ -20,6 +23,7 @@ export function TimerPage() {
     total_phases,
     remaining_seconds,
     elapsed_seconds,
+    clock_now,
     play,
     pause,
     reset,
@@ -72,19 +76,24 @@ export function TimerPage() {
   }, []);
 
   return (
-    <div className="flex flex-col items-center justify-center h-full min-h-[calc(100vh-64px)] lg:min-h-0 gap-8 sm:gap-10 lg:gap-12 xl:gap-14 3xl:gap-16 px-4 py-8 animate-[page-enter_200ms_ease]">
-      <div className="flex flex-col items-center gap-8 sm:gap-10 lg:gap-12 xl:gap-14 3xl:gap-16">
-        <ModeHeader phaseType={phase_type} />
-
-        <FocusingOnBar
-          projectName={displayName}
-          projectColor={displayColor}
-          onSelectProject={setContext}
-          selectedProjectId={active_project_id}
-          selectedTaskId={active_task_id}
-        />
-
-        <div className="flex flex-col items-center gap-4">
+    <div className="relative min-h-[560px] w-full flex-1 text-center lg:min-h-[680px]">
+      <div
+        className={`fixed inset-x-0 top-0 bottom-16 z-10 grid -translate-y-[clamp(30px,4.5vh,64px)] grid-rows-[1fr_auto_1fr] px-4 sm:px-6 lg:bottom-0 lg:px-8 ${
+          sidebarCollapsed ? 'lg:left-16' : 'lg:left-60'
+        }`}
+      >
+        <div className="flex min-h-0 flex-col items-center justify-end gap-4 pb-8 sm:gap-5 sm:pb-10 lg:gap-6 lg:pb-12">
+          <ModeHeader
+            phaseType={phase_type}
+            className="-translate-y-6 sm:-translate-y-8 lg:-translate-y-10"
+          />
+          <FocusingOnBar
+            projectName={displayName}
+            projectColor={displayColor}
+            onSelectProject={setContext}
+            selectedProjectId={active_project_id}
+            selectedTaskId={active_task_id}
+          />
           <TemplateSelector />
           <PhaseBadge current={phase_number} total={total_phases} />
           <div aria-live="polite" aria-atomic="true" className="sr-only">
@@ -94,6 +103,9 @@ export function TimerPage() {
             {status === 'phase_complete' && 'Phase complete'}
             {status === 'session_complete' && 'Session complete'}
           </div>
+        </div>
+
+        <div className="flex -translate-y-[clamp(6px,1vh,14px)] items-center justify-center">
           <TimerDisplay
             remainingSeconds={remaining_seconds}
             totalSeconds={
@@ -104,50 +116,44 @@ export function TimerPage() {
                   : settings.long_break_minutes * 60
             }
             timerStyle={settings.timer_style}
+            clockNow={clock_now}
           />
         </div>
 
-        <TimerControls
-          status={status}
-          onPlay={play}
-          onPause={pause}
-          onReset={reset}
-          onSkip={skip}
-        />
+        <div className="flex min-h-0 flex-col items-center justify-start gap-5 pt-8 sm:gap-6 sm:pt-10 lg:gap-8 lg:pt-12">
+          <TimerControls
+            status={status}
+            onPlay={play}
+            onPause={pause}
+            onReset={reset}
+            onSkip={skip}
+          />
 
-        {/* Keyboard hint */}
-        <div className="hidden lg:flex items-center gap-4 text-[11px] text-text-muted">
-          <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 rounded bg-bg-tertiary border border-border-base font-mono text-[10px]">
-              Space
-            </kbd>
-            Play/Pause
-          </span>
-          <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 rounded bg-bg-tertiary border border-border-base font-mono text-[10px]">
-              R
-            </kbd>
-            Reset
-          </span>
-          <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 rounded bg-bg-tertiary border border-border-base font-mono text-[10px]">
-              S
-            </kbd>
-            Skip
-          </span>
-          <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 rounded bg-bg-tertiary border border-border-base font-mono text-[10px]">
-              Esc
-            </kbd>
-            Pause
-          </span>
-          <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 rounded bg-bg-tertiary border border-border-base font-mono text-[10px]">
-              ?
-            </kbd>
-            Shortcuts
-          </span>
+          <div className="hidden items-center gap-4 text-[11px] text-text-muted lg:flex">
+            {[
+              ['Space', 'Play/Pause'],
+              ['R', 'Reset'],
+              ['S', 'Skip'],
+              ['Esc', 'Pause'],
+              ['?', 'Shortcuts'],
+            ].map(([key, label]) => (
+              <span key={key} className="flex items-center gap-1">
+                <kbd className="rounded border border-border-base bg-bg-tertiary px-1.5 py-0.5 font-mono text-[10px]">
+                  {key}
+                </kbd>
+                {label}
+              </span>
+            ))}
+          </div>
         </div>
+      </div>
+
+      <div
+        className={`fixed inset-x-0 bottom-[4.5rem] z-30 flex justify-center px-4 sm:bottom-5 ${
+          sidebarCollapsed ? 'lg:left-16' : 'lg:left-60'
+        }`}
+      >
+        <MusicPlayer />
       </div>
 
       <SessionCompleteOverlay

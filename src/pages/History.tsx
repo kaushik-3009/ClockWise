@@ -302,17 +302,46 @@ export function HistoryPage() {
         </div>
       )}
 
-      {filteredSessions.length === 0 ? (
+      {filteredSessions.length === 0 && sessions.length === 0 ? (
+        <div className="flex flex-col gap-8">
+          <div className="flex items-center gap-3 bg-bg-card border border-border-base rounded-md px-4 py-3">
+            <Clock className="w-5 h-5 text-brand shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-text-base">No sessions yet</p>
+              <p className="text-xs text-text-sub">
+                Complete a focus session to see your history — here's a preview of the layout
+              </p>
+            </div>
+          </div>
+          <div className="opacity-50 pointer-events-none select-none flex flex-col gap-8">
+            <div>
+              <h2 className="text-sm font-semibold text-text-sub uppercase tracking-wide mb-3">
+                Today
+              </h2>
+              <div className="flex flex-col gap-2">
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-3 p-3 bg-bg-card border border-border-base rounded-md"
+                  >
+                    <span className="w-2 h-2 rounded-full shrink-0 bg-text-muted" />
+                    <div className="flex flex-col min-w-0 flex-1 gap-1.5">
+                      <span className="h-3.5 w-32 rounded bg-bg-tertiary block" />
+                      <span className="h-2.5 w-20 rounded bg-bg-tertiary block" />
+                    </div>
+                    <span className="h-3.5 w-10 rounded bg-bg-tertiary block shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 text-text-muted shrink-0" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : filteredSessions.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-text-muted">
           <Clock className="w-12 h-12 mb-4 opacity-80" />
-          <p className="text-lg font-medium mb-2">
-            {sessions.length === 0 ? 'No sessions yet' : 'No matching sessions'}
-          </p>
-          <p className="text-sm">
-            {sessions.length === 0
-              ? 'Complete a focus session to see your history'
-              : 'Try adjusting your filters'}
-          </p>
+          <p className="text-lg font-medium mb-2">No matching sessions</p>
+          <p className="text-sm">Try adjusting your filters</p>
         </div>
       ) : (
         <div className="flex flex-col gap-8">

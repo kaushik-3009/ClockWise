@@ -8,7 +8,12 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      includeAssets: [
+        'favicon.ico',
+        'apple-touch-icon.png',
+        'mask-icon.svg',
+        'pwa-maskable-512.png',
+      ],
       manifest: {
         name: 'ClockWise',
         short_name: 'ClockWise',
@@ -32,7 +37,7 @@ export default defineConfig({
             purpose: 'any',
           },
           {
-            src: '/pwa-512x512.png',
+            src: '/pwa-maskable-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',

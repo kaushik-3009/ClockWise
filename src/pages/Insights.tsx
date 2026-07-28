@@ -24,6 +24,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { PeriodHeader, type Granularity } from '@/components/stats/PeriodHeader';
 import { formatDuration, formatDateKey } from '@/lib/time';
 import { PROJECT_COLORS } from '@/lib/constants';
+import { EmptyStateNotice } from '@/components/stats/EmptyStateNotice';
 import {
   groupSessionsByDay,
   computeCurrentWeekFocusSeconds,
@@ -303,19 +304,26 @@ export function InsightsPage() {
         />
       </div>
 
-      {!hasData ? (
-        <div className="flex flex-col items-center justify-center py-20 text-text-muted">
-          <Target className="w-12 h-12 mb-4 opacity-80" />
-          <p className="text-lg font-medium mb-2">No data yet</p>
-          <p className="text-sm">Complete some focus sessions to get insights</p>
-        </div>
-      ) : !hasPeriodData ? (
-        <div className="flex flex-col items-center justify-center py-20 text-text-muted">
-          <Target className="w-12 h-12 mb-4 opacity-80" />
-          <p className="text-lg font-medium mb-2">No data for this period</p>
-          <p className="text-sm">Try selecting a different time range</p>
-        </div>
-      ) : (
+      {!hasData && (
+        <EmptyStateNotice
+          icon={Target}
+          title="No data yet"
+          subtitle="Complete some focus sessions to get insights — here's a preview of what you'll see"
+        />
+      )}
+      {hasData && !hasPeriodData && (
+        <EmptyStateNotice
+          icon={Target}
+          title="No data for this period"
+          subtitle="Try selecting a different time range"
+        />
+      )}
+
+      <div
+        className={
+          !hasData || !hasPeriodData ? 'opacity-50 pointer-events-none select-none' : undefined
+        }
+      >
         <>
           {/* KPI Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -327,7 +335,7 @@ export function InsightsPage() {
                 {formatDuration(periodStats.focus_seconds)}
               </div>
               <div
-                className="inline-flex items-center gap-2 w-fit px-2.5 py-1.5 rounded-full text-[13px] font-bold"
+                className="inline-flex items-center gap-2 w-fit max-w-full px-2.5 py-1.5 rounded-lg text-[12px] leading-snug font-bold"
                 style={{ backgroundColor: deltaBadgeBg(delta.focusSecondsDelta) }}
               >
                 <span className={deltaBadgeClass(delta.focusSecondsDelta)}>
@@ -345,7 +353,7 @@ export function InsightsPage() {
                 {periodStats.sessions_completed}
               </div>
               <div
-                className="inline-flex items-center gap-2 w-fit px-2.5 py-1.5 rounded-full text-[13px] font-bold"
+                className="inline-flex items-center gap-2 w-fit max-w-full px-2.5 py-1.5 rounded-lg text-[12px] leading-snug font-bold"
                 style={{ backgroundColor: deltaBadgeBg(delta.sessionsDelta) }}
               >
                 <span className={deltaBadgeClass(delta.sessionsDelta)}>
@@ -359,7 +367,7 @@ export function InsightsPage() {
               <div className="text-[34px] font-display font-extrabold leading-none text-text-base">
                 {bestDay && bestDay.seconds > 0 ? bestDay.name.slice(0, 3) : '-'}
               </div>
-              <div className="inline-flex items-center gap-2 w-fit px-2.5 py-1.5 rounded-full bg-bg-secondary text-text-sub text-[13px] font-bold">
+              <div className="inline-flex items-center gap-2 w-fit max-w-full px-2.5 py-1.5 rounded-lg bg-bg-secondary text-text-sub text-[12px] leading-snug font-bold">
                 {bestDay && bestDay.seconds > 0
                   ? `${(bestDay.seconds / 3600).toFixed(1)} hours focused`
                   : 'No focus yet'}
@@ -371,7 +379,7 @@ export function InsightsPage() {
               <div className="text-[34px] font-display font-extrabold leading-none text-text-base">
                 {consistency > 0 ? `${activeWeekdays}/7` : '-'}
               </div>
-              <div className="inline-flex items-center gap-2 w-fit px-2.5 py-1.5 rounded-full bg-bg-secondary text-text-sub text-[13px] font-bold">
+              <div className="inline-flex items-center gap-2 w-fit max-w-full px-2.5 py-1.5 rounded-lg bg-bg-secondary text-text-sub text-[12px] leading-snug font-bold">
                 Active weekdays
               </div>
             </div>
@@ -450,7 +458,7 @@ export function InsightsPage() {
             </div>
           </div>
         </>
-      )}
+      </div>
     </div>
   );
 }

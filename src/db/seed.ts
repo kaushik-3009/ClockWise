@@ -68,8 +68,11 @@ const TASK_SEEDS: { name: string; projectIndex: number }[] = [
   { name: 'Seed order', projectIndex: 7 },
 ];
 
-const DEFAULT_TEMPLATES: Omit<TimerTemplate, 'id' | 'created_at' | 'user_id'>[] = [
+// Fixed (not random) IDs so re-seeding is idempotent — running this twice (e.g. a
+// double-submit, or a retried signup) overwrites the same docs instead of creating dupes.
+const DEFAULT_TEMPLATES: Omit<TimerTemplate, 'created_at' | 'user_id'>[] = [
   {
+    id: 'default-classic-pomodoro',
     name: 'Classic Pomodoro',
     focus_minutes: 25,
     short_break_minutes: 5,
@@ -78,6 +81,7 @@ const DEFAULT_TEMPLATES: Omit<TimerTemplate, 'id' | 'created_at' | 'user_id'>[] 
     long_break_after_n: 4,
   },
   {
+    id: 'default-deep-work',
     name: 'Deep Work',
     focus_minutes: 50,
     short_break_minutes: 10,
@@ -86,6 +90,7 @@ const DEFAULT_TEMPLATES: Omit<TimerTemplate, 'id' | 'created_at' | 'user_id'>[] 
     long_break_after_n: 2,
   },
   {
+    id: 'default-quick-sprint',
     name: 'Quick Sprint',
     focus_minutes: 15,
     short_break_minutes: 3,
@@ -94,6 +99,7 @@ const DEFAULT_TEMPLATES: Omit<TimerTemplate, 'id' | 'created_at' | 'user_id'>[] 
     long_break_after_n: 3,
   },
   {
+    id: 'default-study-session',
     name: 'Study Session',
     focus_minutes: 45,
     short_break_minutes: 10,
@@ -133,11 +139,8 @@ function weightedPick<T>(arr: T[], weights: number[]): T {
 
 async function hasExistingData(userId: string): Promise<boolean> {
   const db = getFirebaseFirestore();
-  const [projectsSnap, templatesSnap] = await Promise.all([
-    getDocs(collection(db, 'users', userId, 'projects')),
-    getDocs(collection(db, 'users', userId, 'templates')),
-  ]);
-  return projectsSnap.size > 0 || templatesSnap.size > 0;
+  const projectsSnap = await getDocs(collection(db, 'users', userId, 'projects'));
+  return projectsSnap.size > 0;
 }
 
 export async function seedNewUser(userId: string, includeDemoData = true): Promise<void> {
@@ -348,13 +351,34 @@ export async function seedDefaultsOnly(userId: string): Promise<void> {
   const db = getFirebaseFirestore();
   const templatesCol = collection(db, 'users', userId, 'templates');
   const existing = await getDocs(templatesCol);
-  if (existing.size > 0) return;
+
+  // Group existing docs by name so we can also collapse any duplicates left
+  // over from before default templates had fixed ids (a prior version of this
+  // seeding logic used crypto.randomUUID(), which could double-create entries
+  // on retries/races). Grouping by name self-heals those accounts too.
+  const byName = new Map<string, string[]>();
+  existing.docs.forEach((d) => {
+    const name = (d.data() as { name?: string }).name;
+    if (!name) return;
+    const ids = byName.get(name) ?? [];
+    ids.push(d.id);
+    byName.set(name, ids);
+  });
 
   const now = Date.now();
   const batch = writeBatch(db);
+
   DEFAULT_TEMPLATES.forEach((t) => {
-    const id = crypto.randomUUID();
-    batch.set(doc(templatesCol, id), { ...t, user_id: userId, id, created_at: now });
+    const matches = byName.get(t.name) ?? [];
+    if (matches.length === 0) {
+      // Missing entirely — create the canonical fixed-id doc.
+      batch.set(doc(templatesCol, t.id), { ...t, user_id: userId, created_at: now });
+    } else if (matches.length > 1) {
+      // Duplicates — collapse to a single canonical doc.
+      matches.forEach((id) => batch.delete(doc(templatesCol, id)));
+      batch.set(doc(templatesCol, t.id), { ...t, user_id: userId, created_at: now });
+    }
+    // Exactly one match already — leave it alone (may be user-customized).
   });
 
   // Ensure default settings document exists
@@ -365,20 +389,17 @@ export async function seedDefaultsOnly(userId: string): Promise<void> {
 
 export async function clearUserData(userId: string): Promise<void> {
   const db = getFirebaseFirestore();
-  const collections = [
-    'projects',
-    'tasks',
-    'sessions',
-    'streaks',
-    'templates',
-    'settings',
-  ] as const;
+  // 'templates' is intentionally excluded — the default templates should
+  // always be available, even after a data wipe or on a brand new account.
+  const collections = ['projects', 'tasks', 'sessions', 'streaks', 'settings'] as const;
   for (const name of collections) {
     const snap = await getDocs(collection(db, 'users', userId, name));
     const batch = writeBatch(db);
     snap.docs.forEach((d) => batch.delete(d.ref));
     await batch.commit();
   }
+  // Restores default settings and (re-)seeds default templates if they were ever removed.
+  await seedDefaultsOnly(userId);
   console.log(`[seed] Cleared data for user ${userId}.`);
 }
 

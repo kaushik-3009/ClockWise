@@ -34,6 +34,7 @@ import {
 } from '@/lib/stats';
 import { formatDuration } from '@/lib/time';
 import { useSettings } from '@/hooks/useSettings';
+import { EmptyStateNotice } from '@/components/stats/EmptyStateNotice';
 
 export function StatisticsPage() {
   const [granularity, setGranularity] = useState<Granularity>('week');
@@ -354,13 +355,15 @@ export function StatisticsPage() {
         </div>
       )}
 
-      {!hasData ? (
-        <div className="flex flex-col items-center justify-center py-20 text-text-muted">
-          <BarChart3 className="w-12 h-12 mb-4 opacity-80" />
-          <p className="text-lg font-medium mb-2">No sessions yet</p>
-          <p className="text-sm">Complete a focus session to see your statistics</p>
-        </div>
-      ) : (
+      {!hasData && (
+        <EmptyStateNotice
+          icon={BarChart3}
+          title="No sessions yet"
+          subtitle="Complete a focus session to see your statistics — here's a preview of what you'll see"
+        />
+      )}
+
+      <div className={!hasData ? 'opacity-50 pointer-events-none select-none' : undefined}>
         <>
           {/* KPI Cards — styled like Insights */}
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
@@ -370,7 +373,7 @@ export function StatisticsPage() {
                 {formatDuration(stats.focus_seconds)}
               </div>
               <div
-                className="inline-flex items-center gap-2 w-fit px-2.5 py-1.5 rounded-full text-[13px] font-bold"
+                className="inline-flex items-center gap-2 w-fit max-w-full px-2.5 py-1.5 rounded-lg text-[12px] leading-snug font-bold"
                 style={{ backgroundColor: deltaBadgeBg(focusDelta) }}
               >
                 <span className={deltaBadgeClass(focusDelta)}>
@@ -385,7 +388,7 @@ export function StatisticsPage() {
               <div className="text-[34px] font-display font-extrabold leading-none text-text-base">
                 {formatDuration(stats.total_seconds)}
               </div>
-              <div className="inline-flex items-center gap-2 w-fit px-2.5 py-1.5 rounded-full bg-bg-secondary text-text-sub text-[13px] font-bold">
+              <div className="inline-flex items-center gap-2 w-fit max-w-full px-2.5 py-1.5 rounded-lg bg-bg-secondary text-text-sub text-[12px] leading-snug font-bold">
                 Including breaks
               </div>
             </div>
@@ -396,7 +399,7 @@ export function StatisticsPage() {
                 {stats.sessions_started}
               </div>
               <div
-                className="inline-flex items-center gap-2 w-fit px-2.5 py-1.5 rounded-full text-[13px] font-bold"
+                className="inline-flex items-center gap-2 w-fit max-w-full px-2.5 py-1.5 rounded-lg text-[12px] leading-snug font-bold"
                 style={{ backgroundColor: deltaBadgeBg(sessionsDelta) }}
               >
                 <span className={deltaBadgeClass(sessionsDelta)}>
@@ -413,7 +416,7 @@ export function StatisticsPage() {
               <div className="text-[34px] font-display font-extrabold leading-none text-text-base">
                 {stats.sessions_completed}
               </div>
-              <div className="inline-flex items-center gap-2 w-fit px-2.5 py-1.5 rounded-full bg-bg-secondary text-text-sub text-[13px] font-bold">
+              <div className="inline-flex items-center gap-2 w-fit max-w-full px-2.5 py-1.5 rounded-lg bg-bg-secondary text-text-sub text-[12px] leading-snug font-bold">
                 Fully completed sessions
               </div>
             </div>
@@ -423,7 +426,7 @@ export function StatisticsPage() {
               <div className="text-[34px] font-display font-extrabold leading-none text-text-base">
                 {completedTasksCount}
               </div>
-              <div className="inline-flex items-center gap-2 w-fit px-2.5 py-1.5 rounded-full bg-bg-secondary text-text-sub text-[13px] font-bold">
+              <div className="inline-flex items-center gap-2 w-fit max-w-full px-2.5 py-1.5 rounded-lg bg-bg-secondary text-text-sub text-[12px] leading-snug font-bold">
                 Completed tasks
               </div>
             </div>
@@ -459,7 +462,7 @@ export function StatisticsPage() {
           {/* 30-day trend */}
           <TrendChart data={trendData} />
         </>
-      )}
+      </div>
     </div>
   );
 }

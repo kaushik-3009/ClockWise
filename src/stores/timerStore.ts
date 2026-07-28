@@ -9,6 +9,7 @@ interface TimerActions {
   reset: () => void;
   skip: () => void;
   tick: () => void;
+  tickClock: (now: number) => void;
   advancePhase: () => void;
   setContext: (projectId?: string, taskId?: string) => void;
   setSettings: (s: Partial<TimerSettings>) => void;
@@ -27,6 +28,7 @@ function getInitialState(settings: TimerSettings): Omit<TimerState, 'settings'> 
     active_project_id: undefined,
     active_task_id: undefined,
     active_session_id: undefined,
+    clock_now: Date.now(),
   };
 }
 
@@ -93,6 +95,10 @@ export const useTimerStore = create<TimerState & TimerActions>((set, get) => ({
         elapsed_seconds: s.elapsed_seconds + 1,
       }));
     }
+  },
+
+  tickClock: (now) => {
+    set({ clock_now: now });
   },
 
   advancePhase: () => {

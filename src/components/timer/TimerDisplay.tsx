@@ -1,4 +1,4 @@
-import { memo, useState, useEffect } from 'react';
+import { memo } from 'react';
 import { cn } from '@/lib/cn';
 import { formatMMSS } from '@/lib/time';
 import type { TimerStyle } from '@/types';
@@ -7,6 +7,7 @@ interface TimerDisplayProps {
   remainingSeconds: number;
   totalSeconds?: number;
   timerStyle?: TimerStyle;
+  clockNow?: number;
   className?: string;
 }
 
@@ -120,9 +121,11 @@ function AnalogTimerFace({
 function ClockFace({
   remainingSeconds,
   totalSeconds = 25 * 60,
+  clockNow,
 }: {
   remainingSeconds: number;
   totalSeconds?: number;
+  clockNow: number;
 }) {
   const total = totalSeconds > 0 ? totalSeconds : 25 * 60;
   const progress = 1 - remainingSeconds / total;
@@ -130,13 +133,7 @@ function ClockFace({
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference * (1 - progress);
 
-  // Real wall-clock time
-  const [now, setNow] = useState(new Date());
-
-  useEffect(() => {
-    const interval = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(interval);
-  }, []);
+  const now = new Date(clockNow);
 
   const hours = now.getHours();
   const minutes = now.getMinutes();
@@ -259,13 +256,18 @@ export const TimerDisplay = memo(function TimerDisplay({
   remainingSeconds,
   totalSeconds,
   timerStyle = 'digital',
+  clockNow = Date.now(),
   className,
 }: TimerDisplayProps) {
   if (timerStyle === 'clock_numeric') {
     const formatted = formatMMSS(remainingSeconds);
     return (
       <div className={cn('flex flex-col items-center gap-4', className)}>
-        <ClockFace remainingSeconds={remainingSeconds} totalSeconds={totalSeconds} />
+        <ClockFace
+          remainingSeconds={remainingSeconds}
+          totalSeconds={totalSeconds}
+          clockNow={clockNow}
+        />
         <div className="font-display font-bold italic text-text-base text-2xl sm:text-3xl md:text-4xl 3xl:text-5xl tabular-nums">
           {formatted}
         </div>
@@ -288,7 +290,7 @@ export const TimerDisplay = memo(function TimerDisplay({
     <div
       className={cn(
         'flex items-center font-display font-black italic tabular-nums select-none',
-        'text-[64px] sm:text-[80px] md:text-[100px] lg:text-[120px] xl:text-[140px] 2xl:text-[160px] 3xl:text-[190px] 4xl:text-[220px] leading-none',
+        'text-[clamp(88px,12vw,220px)] leading-none',
         className
       )}
     >

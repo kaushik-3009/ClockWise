@@ -6,7 +6,6 @@ import { seedUserDemoData, clearUserData } from '@/db/seed';
 import { exportData, downloadExport, importData, downloadCSVExport } from '@/lib/exportImport';
 import { requestNotificationPermission } from '@/lib/notifications';
 import { useToastStore } from '@/components/ui/Toast';
-import { playAmbient, stopAmbient } from '@/lib/ambient';
 import type { TimerSettings } from '@/types';
 
 const PRESET_COLORS = [
@@ -20,14 +19,6 @@ const PRESET_COLORS = [
   '#EAB308', // Yellow
 ];
 
-const AMBIENT_OPTIONS = [
-  { value: 'off', label: 'Off' },
-  { value: 'rain', label: 'Rain' },
-  { value: 'white', label: 'White Noise' },
-  { value: 'brown', label: 'Brown Noise' },
-  { value: 'cafe', label: 'Cafe' },
-] as const;
-
 export function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user, logOut } = useAuth();
   const { settings, saveSettings } = useSettings();
@@ -36,12 +27,14 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [dangerAction, setDangerAction] = useState<'clear' | 'seed' | null>(null);
   const [dangerConfirm, setDangerConfirm] = useState('');
+  const [dangerLoading, setDangerLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) {
       setDangerAction(null);
       setDangerConfirm('');
+      setDangerLoading(false);
     }
   }, [open]);
 
@@ -72,14 +65,6 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
       update('notifications_enabled', granted);
     } else {
       update('notifications_enabled', false);
-    }
-  };
-
-  const previewAmbient = (type: TimerSettings['ambient_sound']) => {
-    if (type === 'off') {
-      stopAmbient();
-    } else {
-      playAmbient(type, form.ambient_volume);
     }
   };
 
@@ -269,50 +254,6 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           </div>
         </div>
 
-        {/* Ambient Sound */}
-        <div className="border-t border-border-base pt-4">
-          <label className="block text-sm text-text-sub mb-2">Ambient Background Sound</label>
-          <div className="flex rounded-md border border-border-base overflow-hidden mb-3">
-            {AMBIENT_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => {
-                  update('ambient_sound', opt.value);
-                  previewAmbient(opt.value);
-                }}
-                className={`flex-1 py-2 text-xs font-medium transition-colors ${
-                  form.ambient_sound === opt.value
-                    ? 'bg-brand text-white'
-                    : 'text-text-sub hover:text-text-base hover:bg-bg-secondary'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          {form.ambient_sound !== 'off' && (
-            <div>
-              <label className="block text-xs text-text-sub mb-1">Volume</label>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={form.ambient_volume}
-                onChange={(e) => {
-                  const vol = Number(e.target.value);
-                  update('ambient_volume', vol);
-                  if (form.ambient_sound !== 'off') {
-                    playAmbient(form.ambient_sound, vol);
-                  }
-                }}
-                className="w-full"
-              />
-            </div>
-          )}
-        </div>
-
         <button
           type="submit"
           className="w-full h-12 bg-brand hover:bg-brand-hover text-white font-semibold text-base rounded-md transition-colors duration-fast mt-1 shrink-0"
@@ -382,11 +323,11 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           </p>
         )}
 
-        <div className="pt-2 border-t border-border-base">
+        <div className="mt-4">
           <button
             type="button"
             onClick={() => logOut()}
-            className="w-full h-10 rounded-md border border-border-base text-text-sub text-sm font-medium hover:text-text-base hover:bg-bg-secondary transition-colors mb-4"
+            className="w-full h-10 rounded-md border border-border-base text-text-sub text-sm font-medium hover:text-text-base hover:bg-bg-secondary transition-colors mb-5"
           >
             Log out
           </button>
@@ -428,21 +369,26 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
               <div className="flex gap-3">
                 <button
                   type="button"
+                  disabled={dangerLoading}
                   onClick={() => {
                     setDangerAction(null);
                     setDangerConfirm('');
                   }}
-                  className="flex-1 h-10 rounded-md border border-border-base text-text-sub text-sm font-medium hover:bg-bg-tertiary transition-colors"
+                  className="flex-1 h-10 rounded-md border border-border-base text-text-sub text-sm font-medium hover:bg-bg-tertiary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   disabled={
-                    dangerAction === 'clear' ? dangerConfirm !== 'DELETE' : dangerConfirm !== 'SEED'
+                    dangerLoading ||
+                    (dangerAction === 'clear'
+                      ? dangerConfirm !== 'DELETE'
+                      : dangerConfirm !== 'SEED')
                   }
                   onClick={async () => {
                     if (!user) return;
+                    setDangerLoading(true);
                     try {
                       if (dangerAction === 'clear') {
                         await clearUserData(user.uid);
@@ -451,6 +397,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
                       }
                       window.location.reload();
                     } catch (err) {
+                      setDangerLoading(false);
                       addToast(
                         dangerAction === 'clear' ? 'Failed to clear data' : 'Failed to seed data',
                         'error'
@@ -464,7 +411,11 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
                       : 'bg-brand hover:bg-brand-hover')
                   }
                 >
-                  Confirm
+                  {dangerLoading
+                    ? dangerAction === 'clear'
+                      ? 'Clearing…'
+                      : 'Seeding…'
+                    : 'Confirm'}
                 </button>
               </div>
             </div>

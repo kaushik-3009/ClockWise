@@ -44,6 +44,7 @@ It started as a local-only app for personal use. Then I figured if I was buildin
 - **Analytics** -- heatmaps, trend charts, session breakdowns, weekday and time-of-day analysis
 - **Streaks** -- daily goals, streak counting, consistency scoring
 - **Templates** -- saved timer configurations (Classic Pomodoro, Deep Work, Quick Sprint)
+- **Focus music player** -- a bottom-docked lofi and ambient player with station controls, volume, soundscape presets, and a subtle animated rhythm indicator
 - **Ambient sound** -- looping audio (rain, white noise, brown noise, cafe) plus synthesized UI sound effects
 - **Sync & offline** -- Firebase email/password auth, per-user Firestore data, offline persistence, installable PWA
 - **Export** -- JSON and CSV, with automatic backup snapshots on every session completion
@@ -96,6 +97,8 @@ npm run dev                  # start the dev server at localhost:5173
 - **Real audio files for ambient loops, synthesized Web Audio for UI sounds** -- looping rain/cafe/noise sounds better as authored audio; short one-shot clicks/chimes are synthesized through a single shared `AudioContext` and need no audio files.
 - **Recharts with custom HTML tooltips** -- Recharts' default tooltip text inherits the bar's fill color, which makes it invisible in light mode. Custom tooltip components fix that. Chart colors are detected in JS with hex fallbacks because CSS variables don't resolve inside inline SVG.
 - **Type guards for import validation** -- every field of every entity is checked for type, range, and enum membership; no schema library dependency.
+- **Music playback stays isolated from the timer** -- YouTube station playback is initialized on demand, while ambient sound uses the existing Web Audio path; the timer continues to run in its worker independently.
+- **PWA install assets** -- the manifest uses dedicated 192px, 512px, Apple touch, and maskable icons so installed launches and platform splash screens have a proper ClockWise mark instead of a blank placeholder.
 
 ---
 

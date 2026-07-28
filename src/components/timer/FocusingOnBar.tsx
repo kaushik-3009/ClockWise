@@ -28,9 +28,9 @@ export function FocusingOnBar({
       <button
         onClick={() => setPickerOpen(true)}
         className={cn(
-          'inline-flex items-center gap-2 h-8 3xl:h-9 px-3 3xl:px-4 rounded-pill',
+          'inline-flex items-center gap-2 h-9 3xl:h-10 px-4 3xl:px-5 rounded-pill',
           'border border-strong bg-bg-secondary',
-          'text-[13px] 3xl:text-sm transition-colors duration-fast',
+          'text-sm 3xl:text-base transition-colors duration-fast',
           isSet ? 'text-text-base' : 'text-text-muted',
           'hover:border-text-sub',
           className
@@ -42,7 +42,7 @@ export function FocusingOnBar({
             style={{ backgroundColor: projectColor }}
           />
         ) : (
-          <Layers className="w-3.5 h-3.5 shrink-0" />
+          <Layers className="w-4 h-4 shrink-0" />
         )}
         <span className="truncate max-w-[260px] 3xl:max-w-[320px]">
           {isSet ? projectName : "I'm focusing on…"}

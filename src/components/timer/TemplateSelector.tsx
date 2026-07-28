@@ -43,7 +43,7 @@ export function TemplateSelector({ className }: TemplateSelectorProps) {
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          'inline-flex items-center gap-2 h-8 px-3 rounded-full border text-xs font-medium transition-colors',
+          'inline-flex items-center gap-2 h-9 3xl:h-10 px-4 3xl:px-5 rounded-full border text-sm 3xl:text-base font-medium transition-colors',
           activeTemplate
             ? 'border-brand bg-brand-alpha text-brand'
             : 'border-border-base bg-bg-card text-text-sub hover:text-text-base'

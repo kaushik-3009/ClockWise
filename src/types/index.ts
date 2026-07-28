@@ -104,6 +104,7 @@ export interface TimerState {
   active_project_id?: string;
   active_task_id?: string;
   active_session_id?: string;
+  clock_now: number;
   settings: TimerSettings;
 }
 
