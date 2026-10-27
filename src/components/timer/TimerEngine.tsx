@@ -80,7 +80,7 @@ export function TimerEngine() {
     if (status === 'running' || status === 'paused') {
       const paused = status === 'paused' ? ' (paused)' : '';
       document.title = `${formatMMSS(remaining)} · ${PHASE_TITLE[phaseType]}${paused} — ClockWise`;
-    } else if (status === 'session_complete') {
+    } else if (status === 'session_complete' && pageTitle === 'Timer') {
       document.title = 'Session complete — ClockWise';
     } else {
       document.title = pageTitle ? `${pageTitle} — ClockWise` : 'ClockWise';

@@ -94,7 +94,7 @@ export function StreaksPage() {
               },
               { label: 'Focus this month', value: formatDuration(month.stats.focus_seconds) },
               { label: 'Best month', value: bestMonth.name },
-              { label: 'Strongest weekday', value: bestWeekday },
+              { label: 'Strongest weekday (all time)', value: bestWeekday },
             ]}
           />
           <p className="px-1 text-xs font-semibold">

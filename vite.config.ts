@@ -24,7 +24,7 @@ export default defineConfig({
         short_name: 'ClockWise',
         description: 'Pomodoro focus timer + project time-tracker + analytics',
         lang: 'en',
-        theme_color: '#E8521A',
+        theme_color: '#ffffff',
         background_color: '#ffffff',
         display: 'standalone',
         display_override: ['standalone', 'minimal-ui'],

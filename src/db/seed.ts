@@ -251,6 +251,8 @@ export async function seedNewUser(userId: string, includeDemoData = false): Prom
 
       const startedAt = new Date(dayBase);
       startedAt.setHours(hour, randInt(0, 59), randInt(0, 59), 0);
+      // Sample data must never sit in the future (e.g. seeding early in the morning).
+      if (startedAt.getTime() + (focusDuration + breakDuration) * 1000 > now) break;
 
       sessions.push({
         user_id: userId,

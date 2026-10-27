@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { NavLink, Link } from 'react-router-dom';
+import { NavLink, Link, useLocation } from 'react-router-dom';
 import {
   Timer,
   BarChart3,
@@ -49,6 +49,7 @@ export function Sidebar() {
   const { settings } = useSettings();
   const { sessions } = useSessions();
   const { logOut } = useAuth();
+  const onTimerPage = useLocation().pathname === '/timer';
 
   const weekFocusSeconds = useMemo(() => computeCurrentWeekFocusSeconds(sessions), [sessions]);
   const goalHours = settings.weekly_goal_hours;
@@ -76,7 +77,7 @@ export function Sidebar() {
         <Logo size="md" withWordmark={!collapsed} />
       </Link>
 
-      {!collapsed && (
+      {!collapsed && !onTimerPage && (
         <div className="px-4 pb-4">
           <SidebarFocusIndicator className="w-full justify-start" />
         </div>

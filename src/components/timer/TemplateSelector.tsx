@@ -64,7 +64,7 @@ export function TemplateSelector({ className }: TemplateSelectorProps) {
         aria-haspopup="listbox"
         aria-expanded={open}
         className={cn(
-          'inline-flex h-10 max-w-[70vw] items-center gap-2 rounded-full border px-4 text-sm font-medium transition-colors',
+          'inline-flex h-11 max-w-[70vw] items-center gap-2 rounded-full border px-4 text-sm font-medium transition-colors',
           activeTemplate
             ? 'border-brand bg-brand-alpha text-brand-text'
             : 'border-border-base bg-bg-card text-text-sub hover:text-text-base'

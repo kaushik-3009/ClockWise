@@ -192,8 +192,16 @@ body {
 }
 @media (min-width: 1024px) {
   .toast-region {
-    bottom: 24px;
+    bottom: auto;
+    top: 24px;
   }
+}
+
+/* Keep a form's submit button visible while a tall dialog scrolls (landscape phones). */
+.modal-panel form > button[type='submit']:last-child {
+  position: sticky;
+  bottom: 0;
+  box-shadow: 0 -12px 12px -4px var(--bg-card);
 }
 
 /* Modals: a bottom sheet on phones that clears the home indicator, never taller

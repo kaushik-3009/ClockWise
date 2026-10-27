@@ -31,7 +31,7 @@ export function TrendChart({ data, className }: TrendChartProps) {
     <div className={cn('bg-bg-card border border-border-base rounded-md p-5 px-6', className)}>
       <h3 className="text-md font-semibold text-text-base">Last 30 days</h3>
       <p className="text-xs text-text-sub mt-0.5 mb-4">Focus time over the last 30 days</p>
-      <ResponsiveContainer width="100%" height={220}>
+      <ResponsiveContainer width="100%" height={220} initialDimension={{ width: 320, height: 200 }}>
         <AreaChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">

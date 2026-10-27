@@ -18,6 +18,17 @@ const FOCUSABLE_SELECTOR =
 
 let openCount = 0;
 
+// Remember the last element focused outside any dialog. Reading
+// document.activeElement when the dialog opens is too late: an autoFocus field
+// inside the dialog has already taken focus by then.
+let lastOutsideFocus: HTMLElement | null = null;
+if (typeof document !== 'undefined') {
+  document.addEventListener('focusin', (e) => {
+    const el = e.target as HTMLElement;
+    if (!el.closest?.('[role="dialog"]')) lastOutsideFocus = el;
+  });
+}
+
 /** Lock background scroll while any modal is open (iOS-safe: no position:fixed jump). */
 function lockScroll() {
   if (openCount++ === 0) document.documentElement.classList.add('modal-open');
@@ -40,7 +51,7 @@ export function Modal({ open, onClose, title, children, className, footer }: Mod
     const panel = panelRef.current;
     if (!panel) return;
 
-    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previouslyFocused = lastOutsideFocus;
     lockScroll();
 
     // Prefer an explicitly autofocused field, then the first form control, then

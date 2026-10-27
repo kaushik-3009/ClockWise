@@ -66,7 +66,11 @@ export function FocusVsBreakDonut({
       ) : (
         <>
           <div className="relative">
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer
+              width="100%"
+              height={200}
+              initialDimension={{ width: 320, height: 200 }}
+            >
               <PieChart>
                 <Pie
                   data={data}

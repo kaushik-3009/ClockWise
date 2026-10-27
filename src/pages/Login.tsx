@@ -42,7 +42,16 @@ export function LoginPage() {
         text: `If an account exists for ${email.trim()}, a reset link is on its way.`,
       });
     } catch (err) {
-      setMessage({ kind: 'error', text: friendlyAuthError(err) });
+      const code = (err as { code?: string }).code;
+      // Same answer whether or not the account exists (no account enumeration).
+      if (code === 'auth/user-not-found') {
+        setMessage({
+          kind: 'info',
+          text: `If an account exists for ${email.trim()}, a reset link is on its way.`,
+        });
+      } else {
+        setMessage({ kind: 'error', text: friendlyAuthError(err) });
+      }
     }
   };
 

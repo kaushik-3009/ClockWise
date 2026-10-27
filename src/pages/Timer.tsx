@@ -140,6 +140,7 @@ export function TimerPage() {
           onPause={timerPause}
           onReset={requestReset}
           onSkip={timerSkip}
+          canSkip={!(status === 'idle' && phaseNumber === 1 && sessionPhases === 0)}
         />
 
         {shortcutsEnabled && (
@@ -161,7 +162,7 @@ export function TimerPage() {
         )}
       </div>
 
-      <div className="sticky bottom-0 z-20 flex justify-center px-4 pb-3 pt-2">
+      <div className="flex justify-center px-4 pb-3 pt-2">
         <MusicPlayer />
       </div>
 

@@ -74,7 +74,11 @@ export function SessionsChart({ data, highlightDay, subtitle, className }: Sessi
       ) : (
         <>
           <div className="h-[220px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+              initialDimension={{ width: 320, height: 200 }}
+            >
               <BarChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
                 <XAxis

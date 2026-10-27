@@ -26,6 +26,9 @@ export function TemplatesPage() {
   const [showForm, setShowForm] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<TimerTemplate | null>(null);
 
+  // Several templates can share the same values; mark only the first as in use.
+  const activeId = templates.find((t) => matchesTemplate(t, settings))?.id;
+
   const handleApply = (template: TimerTemplate) => {
     const midSession = !isFreshSession(useTimerStore.getState());
     saveSettings({
@@ -73,7 +76,7 @@ export function TemplatesPage() {
       ) : (
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {templates.map((template) => {
-            const active = matchesTemplate(template, settings);
+            const active = template.id === activeId;
             return (
               <li
                 key={template.id}

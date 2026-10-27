@@ -48,6 +48,7 @@ export function ProjectsPage() {
   const [showDone, setShowDone] = useState(false);
   const [projectFormOpen, setProjectFormOpen] = useState(false);
   const [taskFormOpen, setTaskFormOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
 
   const {
@@ -60,7 +61,14 @@ export function ProjectsPage() {
     archive,
     unarchive,
   } = useProjects();
-  const { allTasks, loading: tasksLoading, addTask, removeTask, setCompleted } = useTasks();
+  const {
+    allTasks,
+    loading: tasksLoading,
+    addTask,
+    editTask,
+    removeTask,
+    setCompleted,
+  } = useTasks();
   const { sessions } = useSessions();
   const setTimerContext = useTimerStore((s) => s.setContext);
 
@@ -232,6 +240,7 @@ export function ProjectsPage() {
                 totalFocusSeconds={taskTotals.get(task.id) ?? 0}
                 completedPomodoros={taskPomodoros.get(task.id) ?? 0}
                 onToggleComplete={(done) => setCompleted(task.id, done)}
+                onEdit={() => setEditingTask(task)}
                 onDelete={() => deleteTask(task)}
                 onPlay={() => focusOn(task.project_id, task.id)}
               />
@@ -282,13 +291,21 @@ export function ProjectsPage() {
         }}
       />
       <TaskForm
-        open={taskFormOpen}
-        onClose={() => setTaskFormOpen(false)}
+        open={taskFormOpen || editingTask !== null}
+        onClose={() => {
+          setTaskFormOpen(false);
+          setEditingTask(null);
+        }}
         onSubmit={(data) => {
-          addTask(data);
-          setActiveTab('tasks');
+          if (editingTask) {
+            editTask(editingTask.id, data);
+          } else {
+            addTask(data);
+            setActiveTab('tasks');
+          }
         }}
         projects={activeProjects}
+        initialData={editingTask ?? undefined}
       />
 
       <ConfirmDialog

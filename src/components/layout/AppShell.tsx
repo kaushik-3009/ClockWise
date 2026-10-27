@@ -33,6 +33,7 @@ export function AppShell() {
 
       {/* Desktop sidebar */}
       <aside
+        aria-label="Sidebar"
         className={cn(
           'safe-top hidden h-full shrink-0 flex-col overflow-hidden border-r border-border-base bg-bg-sidebar transition-[width] duration-base ease lg:flex',
           sidebarCollapsed ? 'w-16' : 'w-60'

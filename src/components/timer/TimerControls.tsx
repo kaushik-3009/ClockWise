@@ -8,6 +8,7 @@ interface TimerControlsProps {
   onPause: () => void;
   onReset: () => void;
   onSkip: () => void;
+  canSkip?: boolean;
   className?: string;
 }
 
@@ -20,6 +21,7 @@ export function TimerControls({
   onPause,
   onReset,
   onSkip,
+  canSkip = true,
   className,
 }: TimerControlsProps) {
   const isRunning = status === 'running';
@@ -52,7 +54,7 @@ export function TimerControls({
       <button
         type="button"
         onClick={onSkip}
-        disabled={status === 'session_complete'}
+        disabled={!canSkip || status === 'session_complete'}
         className={secondary}
         aria-label="Skip to next phase"
       >

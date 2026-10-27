@@ -186,7 +186,7 @@ export function InsightsPage() {
               footnote={<span className="text-text-sub">{consistency.pct}% of days so far</span>}
             />
             <KpiCard
-              label="Best day"
+              label="Strongest weekday"
               value={bestDay ? bestDay.name.slice(0, 3) : '—'}
               footnote={
                 <span className="text-text-sub">

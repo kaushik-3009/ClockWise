@@ -28,7 +28,7 @@ export function FocusingOnBar({
       <button
         onClick={() => setPickerOpen(true)}
         className={cn(
-          'inline-flex items-center gap-2 h-9 3xl:h-10 px-4 3xl:px-5 rounded-pill',
+          'inline-flex items-center gap-2 h-11 px-4 3xl:px-5 rounded-pill',
           'border border-strong bg-bg-secondary',
           'text-sm 3xl:text-base transition-colors duration-fast',
           isSet ? 'text-text-base' : 'text-text-muted',

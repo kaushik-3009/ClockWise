@@ -52,6 +52,7 @@ export function SessionEditModal({
   const [projectId, setProjectId] = useState('');
   const [taskId, setTaskId] = useState('');
   const [note, setNote] = useState('');
+  const [startTouched, setStartTouched] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -63,6 +64,7 @@ export function SessionEditModal({
     setProjectId(session?.project_id ?? '');
     setTaskId(session?.task_id ?? '');
     setNote(session?.note ?? '');
+    setStartTouched(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -131,7 +133,13 @@ export function SessionEditModal({
               min={1}
               max={MAX_MINUTES}
               value={minutes}
-              onChange={(e) => setMinutes(e.target.value)}
+              onChange={(e) => {
+                setMinutes(e.target.value);
+                // New entries default to "just finished": keep the end at now.
+                const m = Number(e.target.value);
+                if (!session && !startTouched && m > 0)
+                  setStart(toLocalInput(Date.now() - m * 60_000));
+              }}
               aria-invalid={Boolean(errors.minutes)}
               className="field"
             />
@@ -148,7 +156,10 @@ export function SessionEditModal({
             type="datetime-local"
             value={start}
             max={toLocalInput(Date.now())}
-            onChange={(e) => setStart(e.target.value)}
+            onChange={(e) => {
+              setStart(e.target.value);
+              setStartTouched(true);
+            }}
             aria-invalid={Boolean(errors.start)}
             className="field"
           />
