@@ -28,7 +28,7 @@ export function ModeHeader({ phaseType, className = '' }: ModeHeaderProps) {
         <span className="h-px w-8 bg-border-strong sm:w-14" aria-hidden="true" />
       </div>
       {/* Always rendered so switching phases doesn't shift the layout. */}
-      <span className="text-xs font-medium uppercase tracking-[0.14em] text-text-sub 3xl:text-sm">
+      <span className="text-xs font-medium uppercase tracking-[0.14em] text-text-sub 3xl:text-sm [@media(max-height:500px)]:hidden">
         {mode.subtitle}
       </span>
     </div>

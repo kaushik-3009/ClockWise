@@ -96,70 +96,75 @@ export function TimerPage() {
   return (
     <div className="flex flex-1 flex-col text-center">
       <h1 className="sr-only">Timer</h1>
-      <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-6 sm:gap-5 lg:gap-6">
-        <ModeHeader phaseType={phaseType} />
+      {/* Short landscape screens (phones on their side) lay the two groups side by side. */}
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-6 sm:gap-5 lg:gap-6 [@media(max-height:500px)]:flex-row [@media(max-height:500px)]:gap-10 [@media(max-height:500px)]:py-3">
+        <div className="flex flex-col items-center gap-4 sm:gap-5 lg:gap-6 [@media(max-height:500px)]:gap-3">
+          <ModeHeader phaseType={phaseType} />
 
-        <div className="flex max-w-full flex-wrap items-center justify-center gap-2">
-          <FocusingOnBar
-            projectName={displayName}
-            projectColor={displayColor}
-            onSelectProject={setContext}
-            selectedProjectId={activeProjectId}
-            selectedTaskId={activeTaskId}
-          />
-          <TemplateSelector />
-        </div>
-
-        <PhaseBadge
-          current={Math.min(phaseNumber, totalPhases)}
-          total={totalPhases}
-          next={nextPhase?.type}
-        />
-
-        <div
-          role="timer"
-          aria-label={`${PHASE_NAME[phaseType]}: ${formatDuration(remaining)} remaining`}
-          className="flex items-center justify-center py-1"
-        >
-          <TimerDisplay
-            remainingSeconds={remaining}
-            totalSeconds={duration}
-            timerStyle={timerStyle}
-            clockNow={clockNow}
-          />
-        </div>
-
-        {/* Announce state changes only — never the per-second countdown. */}
-        <div aria-live="polite" aria-atomic="true" className="sr-only">
-          {`${STATUS_ANNOUNCEMENT[status]}. ${PHASE_NAME[phaseType]}, phase ${Math.min(phaseNumber, totalPhases)} of ${totalPhases}.`}
-        </div>
-
-        <TimerControls
-          status={status}
-          onPlay={timerPlay}
-          onPause={timerPause}
-          onReset={requestReset}
-          onSkip={timerSkip}
-          canSkip={!(status === 'idle' && phaseNumber === 1 && sessionPhases === 0)}
-        />
-
-        {shortcutsEnabled && (
-          <div className="hidden flex-wrap items-center justify-center gap-4 text-xs text-text-muted lg:flex">
-            {[
-              ['Space', 'Play/Pause'],
-              ['R', 'Reset'],
-              ['S', 'Skip'],
-              ['?', 'Shortcuts'],
-            ].map(([key, label]) => (
-              <span key={key} className="flex items-center gap-1">
-                <kbd className="rounded border border-border-base bg-bg-tertiary px-1.5 py-0.5 font-mono text-2xs">
-                  {key}
-                </kbd>
-                {label}
-              </span>
-            ))}
+          <div className="flex max-w-full flex-wrap items-center justify-center gap-2">
+            <FocusingOnBar
+              projectName={displayName}
+              projectColor={displayColor}
+              onSelectProject={setContext}
+              selectedProjectId={activeProjectId}
+              selectedTaskId={activeTaskId}
+            />
+            <TemplateSelector />
           </div>
-        )}
+
+          <PhaseBadge
+            current={Math.min(phaseNumber, totalPhases)}
+            total={totalPhases}
+            next={nextPhase?.type}
+          />
+        </div>
+
+        <div className="flex flex-col items-center gap-4 sm:gap-5 lg:gap-6 [@media(max-height:500px)]:gap-3">
+          <div
+            role="timer"
+            aria-label={`${PHASE_NAME[phaseType]}: ${formatDuration(remaining)} remaining`}
+            className="flex items-center justify-center py-1"
+          >
+            <TimerDisplay
+              remainingSeconds={remaining}
+              totalSeconds={duration}
+              timerStyle={timerStyle}
+              clockNow={clockNow}
+            />
+          </div>
+
+          {/* Announce state changes only — never the per-second countdown. */}
+          <div aria-live="polite" aria-atomic="true" className="sr-only">
+            {`${STATUS_ANNOUNCEMENT[status]}. ${PHASE_NAME[phaseType]}, phase ${Math.min(phaseNumber, totalPhases)} of ${totalPhases}.`}
+          </div>
+
+          <TimerControls
+            status={status}
+            onPlay={timerPlay}
+            onPause={timerPause}
+            onReset={requestReset}
+            onSkip={timerSkip}
+            canSkip={!(status === 'idle' && phaseNumber === 1 && sessionPhases === 0)}
+          />
+
+          {shortcutsEnabled && (
+            <div className="hidden flex-wrap items-center justify-center gap-4 text-xs text-text-muted lg:flex">
+              {[
+                ['Space', 'Play/Pause'],
+                ['R', 'Reset'],
+                ['S', 'Skip'],
+                ['?', 'Shortcuts'],
+              ].map(([key, label]) => (
+                <span key={key} className="flex items-center gap-1">
+                  <kbd className="rounded border border-border-base bg-bg-tertiary px-1.5 py-0.5 font-mono text-2xs">
+                    {key}
+                  </kbd>
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex justify-center px-4 pb-3 pt-2">

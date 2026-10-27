@@ -17,7 +17,8 @@ const rad = (deg: number) => ((deg - 90) * Math.PI) / 180;
 
 // Scales with the smaller of width and height so the dial fits phones in both
 // orientations without pushing the controls off-screen.
-const DIAL_SIZE = 'h-[min(68vw,38dvh,440px)] w-[min(68vw,38dvh,440px)]';
+const DIAL_SIZE =
+  'h-[min(68vw,38dvh,440px)] w-[min(68vw,38dvh,440px)] [@media(max-height:500px)]:h-[52dvh] [@media(max-height:500px)]:w-[52dvh]';
 
 function Hand({
   deg,
@@ -183,7 +184,7 @@ export const TimerDisplay = memo(function TimerDisplay({
     <div
       className={cn(
         'flex select-none items-center font-display font-black italic tabular-nums',
-        'text-[clamp(84px,min(24vw,18dvh),220px)] leading-none',
+        'text-[clamp(64px,min(24vw,22dvh),220px)] leading-none',
         className
       )}
     >
