@@ -1,4 +1,4 @@
-import type { TimerSettings, PhaseType } from '@/types';
+import type { TimerSettings, TimerTemplate, PhaseType } from '@/types';
 
 export type Phase = { type: PhaseType; duration_minutes: number };
 
@@ -30,4 +30,25 @@ export function getPhaseAtIndex(settings: TimerSettings, index: number): Phase {
     return { type: 'focus', duration_minutes: settings.focus_minutes };
   }
   return sequence[index];
+}
+
+/** Total length of one full session, in seconds (follows the real phase sequence). */
+export function sessionLengthSeconds(
+  settings: Pick<TimerSettings, keyof TimerTemplate & keyof TimerSettings>
+): number {
+  return buildPhaseSequence(settings as TimerSettings).reduce(
+    (sum, p) => sum + p.duration_minutes * 60,
+    0
+  );
+}
+
+/** Does this template describe the given timer settings exactly? */
+export function matchesTemplate(t: TimerTemplate, s: TimerSettings): boolean {
+  return (
+    t.focus_minutes === s.focus_minutes &&
+    t.short_break_minutes === s.short_break_minutes &&
+    t.long_break_minutes === s.long_break_minutes &&
+    t.phases_per_session === s.phases_per_session &&
+    t.long_break_after_n === s.long_break_after_n
+  );
 }

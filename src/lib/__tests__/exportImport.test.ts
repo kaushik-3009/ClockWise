@@ -1,101 +1,111 @@
 import { describe, it, expect } from 'vitest';
-import { importData } from '../exportImport';
-import type { ExportData } from '@/types';
+import { validateExportData, escapeCSV, buildSessionsCSV } from '../exportImport';
+import type { Session } from '@/types';
 
-const TEST_USER_ID = 'test-user-1';
+const base = { version: 1, exported_at: '2026-01-01T00:00:00.000Z' };
 
-describe('importData validation', () => {
-  it('rejects data with invalid version', async () => {
-    const data = {
-      version: 99,
-      exported_at: new Date().toISOString(),
-      projects: [],
-      tasks: [],
-      sessions: [],
-      streaks: [],
-      settings: null,
-    };
-
-    await expect(importData(TEST_USER_ID, data as unknown as ExportData)).rejects.toThrow(
+describe('validateExportData', () => {
+  it('rejects unsupported versions', () => {
+    expect(() => validateExportData({ ...base, version: 99 })).toThrow(
       'Unsupported export version'
     );
   });
 
-  it('rejects data with invalid project color', async () => {
-    const data: ExportData = {
-      version: 1,
-      exported_at: new Date().toISOString(),
+  it('rejects non-object input', () => {
+    expect(() => validateExportData('nope')).toThrow();
+    expect(() => validateExportData([])).toThrow();
+  });
+
+  it('accepts its own export with missing optional fields (no undefined values)', () => {
+    const { data, skipped } = validateExportData({
+      ...base,
       projects: [
-        {
-          id: 'proj-1',
-          user_id: TEST_USER_ID,
-          name: 'Bad',
-          color: 'rainbow' as unknown as 'blue',
-          status: 'active',
-          created_at: Date.now(),
-        },
+        { id: 'p1', user_id: 'x', name: 'P', color: 'blue', status: 'active', created_at: 1 },
       ],
-      tasks: [],
-      sessions: [],
-      streaks: [],
-      settings: null,
-    };
-
-    await expect(importData(TEST_USER_ID, data)).rejects.toThrow('Invalid project.color');
-  });
-
-  it('rejects data with invalid accent_color format', async () => {
-    const data: ExportData = {
-      version: 1,
-      exported_at: new Date().toISOString(),
-      projects: [],
-      tasks: [],
-      sessions: [],
-      streaks: [],
-      settings: {
-        focus_minutes: 25,
-        short_break_minutes: 5,
-        long_break_minutes: 15,
-        phases_per_session: 8,
-        long_break_after_n: 4,
-        auto_start: false,
-        sound_enabled: true,
-        notifications_enabled: false,
-        timer_style: 'digital',
-        accent_color: 'not-a-color',
-        ambient_sound: 'off',
-        ambient_volume: 0.3,
-        weekly_goal_hours: 20,
-        warn_before_seconds: 60,
-      },
-    };
-
-    await expect(importData(TEST_USER_ID, data)).rejects.toThrow('Invalid settings.accent_color');
-  });
-
-  it('rejects session with negative duration', async () => {
-    const data: ExportData = {
-      version: 1,
-      exported_at: new Date().toISOString(),
-      projects: [],
-      tasks: [],
+      tasks: [{ id: 't1', user_id: 'x', name: 'T', is_completed: false, created_at: 1 }],
       sessions: [
         {
-          id: 'sess-1',
-          user_id: TEST_USER_ID,
+          id: 's1',
+          user_id: 'x',
           type: 'focus',
-          started_at: Date.now(),
-          duration_seconds: -100,
+          started_at: 1,
+          duration_seconds: 60,
           phase_number: 1,
-          completed: false,
+          completed: true,
         },
       ],
-      streaks: [],
+      streaks: [{ date: '2026-01-01' }], // legacy field, ignored
       settings: null,
-    };
+    });
+    expect(skipped).toBe(0);
+    expect(data.projects).toHaveLength(1);
+    expect(data.sessions[0].ended_at).toBeUndefined();
+  });
 
-    await expect(importData(TEST_USER_ID, data)).rejects.toThrow(
-      'Invalid session.duration_seconds'
+  it('skips records with invalid ids or shapes instead of failing', () => {
+    const { data, skipped } = validateExportData({
+      ...base,
+      projects: [
+        { id: 'a/b', name: 'Slash', color: 'blue', status: 'active', created_at: 1 },
+        { id: 'ok', name: 'Fine', color: 'rainbow', status: 'active', created_at: 1 },
+        { id: 'noname', color: 'blue' },
+      ],
+      sessions: [{ id: 's', type: 'focus', started_at: Infinity }],
+    });
+    expect(data.projects.map((p) => p.id)).toEqual(['ok']);
+    expect(data.projects[0].color).toBe('blue');
+    expect(skipped).toBe(3);
+  });
+
+  it('normalizes and clamps settings', () => {
+    const { data } = validateExportData({
+      ...base,
+      settings: { focus_minutes: -5, accent_color: 'red', phases_per_session: 9999 },
+    });
+    expect(data.settings?.focus_minutes).toBe(1);
+    expect(data.settings?.phases_per_session).toBe(24);
+    expect(data.settings?.accent_color).toBe('#E8521A');
+  });
+});
+
+describe('CSV export', () => {
+  it('neutralizes spreadsheet formulas', () => {
+    expect(escapeCSV('=HYPERLINK("x")')).toBe(`"'=HYPERLINK(""x"")"`);
+    expect(escapeCSV('+1')).toBe("'+1");
+    expect(escapeCSV(-3)).toBe('-3');
+  });
+
+  it('includes project and task names', () => {
+    const sessions: Session[] = [
+      {
+        id: 's1',
+        user_id: 'u',
+        project_id: 'p1',
+        task_id: 'gone',
+        type: 'focus',
+        started_at: 0,
+        duration_seconds: 1500,
+        phase_number: 1,
+        completed: true,
+      },
+    ];
+    const csv = buildSessionsCSV(
+      sessions,
+      [
+        {
+          id: 'p1',
+          user_id: 'u',
+          name: 'Thesis, part 2',
+          color: 'blue',
+          status: 'active',
+          created_at: 0,
+        },
+      ],
+      []
     );
+    const row = csv.split('\n')[1];
+    expect(row).toContain('"Thesis, part 2"');
+    expect(row).toContain('Deleted task');
+    expect(row).toContain(',25,');
   });
 });

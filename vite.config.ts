@@ -7,55 +7,60 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt': a new version waits until the user chooses to reload (or the app
+      // is next cold-started) instead of swapping code under a running session.
+      registerType: 'prompt',
+      injectRegister: false,
       includeAssets: [
         'favicon.ico',
+        'favicon.svg',
         'apple-touch-icon.png',
         'mask-icon.svg',
-        'pwa-maskable-512.png',
+        'theme-init.js',
       ],
       manifest: {
+        id: '/',
         name: 'ClockWise',
         short_name: 'ClockWise',
-        description: 'Pomodoro focus timer + project time-tracker + analytics dashboard',
+        description: 'Pomodoro focus timer + project time-tracker + analytics',
+        lang: 'en',
         theme_color: '#E8521A',
-        background_color: '#FFFFFF',
+        background_color: '#ffffff',
         display: 'standalone',
+        display_override: ['standalone', 'minimal-ui'],
         orientation: 'any',
         scope: '/',
-        start_url: '/',
+        start_url: '/timer',
+        categories: ['productivity'],
         icons: [
+          { src: '/pwa-64x64.png', sizes: '64x64', type: 'image/png' },
+          { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
           {
-            src: '/pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png',
-          },
-          {
-            src: '/pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any',
-          },
-          {
-            src: '/pwa-maskable-512.png',
+            src: '/maskable-icon-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',
           },
+          {
+            src: '/monochrome-icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'monochrome',
+          },
         ],
       },
       workbox: {
+        // Precache fonts too, so an offline launch still has its typography.
+        globPatterns: ['**/*.{js,css,html,woff2,svg,ico}', 'pwa-*.png', 'apple-touch-icon.png'],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/__\/.*/],
+        navigateFallbackDenylist: [/^\/__\/.*/, /\.[a-z0-9]+$/i],
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+            urlPattern: ({ url }) => url.pathname.startsWith('/splash/'),
             handler: 'CacheFirst',
-            options: {
-              cacheName: 'gstatic-fonts',
-              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
+            options: { cacheName: 'splash', expiration: { maxEntries: 20 } },
           },
         ],
       },
@@ -69,11 +74,11 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
+        // Recharts is only needed by the stats pages, so let Rollup keep it in
+        // their lazy chunks instead of preloading it on first visit.
         manualChunks: {
-          recharts: ['recharts'],
           vendor: ['react', 'react-dom', 'react-router-dom', 'zustand'],
           firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore'],
-          date: ['date-fns'],
         },
       },
     },

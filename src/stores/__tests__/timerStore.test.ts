@@ -1,114 +1,155 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useTimerStore } from '../timerStore';
+import { useTimerStore, initialTimerData, isFreshSession, MIN_RECORD_SECONDS } from '../timerStore';
 import { DEFAULT_SETTINGS } from '@/db/queries/settings';
+import type { TimerSettings } from '@/types';
+
+const MIN = 60_000;
+const T0 = 1_700_000_000_000;
+
+const store = () => useTimerStore.getState();
+
+function setup(overrides: Partial<TimerSettings> = {}) {
+  const settings = { ...DEFAULT_SETTINGS, ...overrides };
+  useTimerStore.setState({ ...initialTimerData(settings), owner_uid: 'u1' });
+}
 
 describe('timerStore', () => {
-  beforeEach(() => {
-    useTimerStore.setState({
-      ...useTimerStore.getState(),
-      status: 'idle',
-      phase_type: 'focus',
-      phase_number: 1,
-      total_phases: DEFAULT_SETTINGS.phases_per_session,
-      remaining_seconds: DEFAULT_SETTINGS.focus_minutes * 60,
-      elapsed_seconds: 0,
-      active_project_id: undefined,
-      active_task_id: undefined,
-      active_session_id: undefined,
-      settings: DEFAULT_SETTINGS,
-    });
-  });
+  beforeEach(() => setup());
 
-  it('starts with idle state', () => {
-    const s = useTimerStore.getState();
+  it('starts idle on a 25-minute focus phase', () => {
+    const s = store();
     expect(s.status).toBe('idle');
     expect(s.phase_number).toBe(1);
+    expect(s.phase_type).toBe('focus');
     expect(s.remaining_seconds).toBe(1500);
+    expect(isFreshSession(s)).toBe(true);
   });
 
-  it('play transitions idle → running', () => {
-    useTimerStore.getState().play();
-    expect(useTimerStore.getState().status).toBe('running');
+  it('computes remaining time from the wall clock, not from tick count', () => {
+    store().play(T0);
+    // A single tick 10 minutes later (e.g. the app was frozen in the background).
+    store().tick(T0 + 10 * MIN);
+    expect(store().remaining_seconds).toBe(15 * 60);
+    expect(store().elapsed_seconds).toBe(10 * 60);
   });
 
-  it('pause transitions running → paused', () => {
-    useTimerStore.getState().play();
-    useTimerStore.getState().pause();
-    expect(useTimerStore.getState().status).toBe('paused');
+  it('pausing freezes the remaining time across long gaps', () => {
+    store().play(T0);
+    store().pause(T0 + 5 * MIN);
+    store().tick(T0 + 60 * MIN);
+    expect(store().status).toBe('paused');
+    expect(store().remaining_seconds).toBe(20 * 60);
+    store().play(T0 + 60 * MIN);
+    store().tick(T0 + 61 * MIN);
+    expect(store().remaining_seconds).toBe(19 * 60);
   });
 
-  it('tick decrements remaining and increments elapsed', () => {
-    useTimerStore.getState().play();
-    useTimerStore.getState().tick();
-    const s = useTimerStore.getState();
-    expect(s.remaining_seconds).toBe(1499);
-    expect(s.elapsed_seconds).toBe(1);
-  });
-
-  it('tick at 1s left triggers phase_complete', () => {
-    useTimerStore.setState({ remaining_seconds: 1 });
-    useTimerStore.getState().play();
-    useTimerStore.getState().tick();
-    const s = useTimerStore.getState();
-    expect(s.status).toBe('phase_complete');
-    expect(s.remaining_seconds).toBe(0);
-  });
-
-  it('advancePhase moves to next phase', () => {
-    useTimerStore.getState().play();
-    useTimerStore.setState({ status: 'phase_complete' });
-    useTimerStore.getState().advancePhase();
-    const s = useTimerStore.getState();
-    expect(s.phase_number).toBe(2);
-    expect(s.phase_type).toBe('short_break');
-    expect(s.remaining_seconds).toBe(300);
-  });
-
-  it('skip advances phase from running', () => {
-    useTimerStore.getState().play();
-    useTimerStore.getState().skip();
-    const s = useTimerStore.getState();
-    expect(s.phase_number).toBe(2);
-    expect(s.phase_type).toBe('short_break');
-  });
-
-  it('reset returns to idle phase 1', () => {
-    useTimerStore.setState({
-      status: 'running',
-      phase_number: 3,
-      remaining_seconds: 100,
-      elapsed_seconds: 50,
+  it('completes a phase at its exact end time and records it', () => {
+    store().setContext('p1', 't1');
+    store().play(T0);
+    const fx = store().tick(T0 + 26 * MIN);
+    expect(fx.finished).toEqual(['focus']);
+    expect(fx.records).toHaveLength(1);
+    expect(fx.records[0]).toMatchObject({
+      type: 'focus',
+      started_at: T0,
+      ended_at: T0 + 25 * MIN,
+      duration_seconds: 1500,
+      completed: true,
+      project_id: 'p1',
+      task_id: 't1',
     });
-    useTimerStore.getState().reset();
-    const s = useTimerStore.getState();
-    expect(s.status).toBe('idle');
-    expect(s.phase_number).toBe(1);
-    expect(s.remaining_seconds).toBe(1500);
-    expect(s.elapsed_seconds).toBe(0);
+    // Without auto-start the break waits for the user.
+    expect(store().status).toBe('idle');
+    expect(store().phase_type).toBe('short_break');
+    expect(store().remaining_seconds).toBe(300);
   });
 
-  it('reset preserves active context', () => {
-    useTimerStore.getState().setContext('proj-1', 'task-1');
-    useTimerStore.getState().play();
-    useTimerStore.getState().reset();
-    const s = useTimerStore.getState();
-    expect(s.active_project_id).toBe('proj-1');
-    expect(s.active_task_id).toBe('task-1');
+  it('catches up over several phases after the app was suspended (auto-start)', () => {
+    setup({ auto_start: true });
+    store().play(T0);
+    // Phone locked for 62 minutes: F 0–25, S 25–30, F 30–55, S 55–60, then 2 min into F.
+    const fx = store().tick(T0 + 62 * MIN);
+    expect(fx.records.map((r) => r.type)).toEqual(['focus', 'short_break', 'focus', 'short_break']);
+    expect(fx.records[1].started_at).toBe(T0 + 25 * MIN);
+    expect(fx.records[2].ended_at).toBe(T0 + 55 * MIN);
+    expect(store().status).toBe('running');
+    expect(store().phase_number).toBe(5);
+    expect(store().remaining_seconds).toBe(23 * 60);
+    expect(store().session_focus_seconds).toBe(50 * 60);
   });
 
-  it('setSettings updates total_phases when idle', () => {
-    useTimerStore.getState().setSettings({ phases_per_session: 4 });
-    const s = useTimerStore.getState();
-    expect(s.settings.phases_per_session).toBe(4);
-    expect(s.total_phases).toBe(4);
+  it('starting again after a finished session begins with focus, not a break', () => {
+    setup({ phases_per_session: 2 });
+    store().play(T0);
+    store().tick(T0 + 25 * MIN);
+    store().play(T0 + 25 * MIN);
+    const fx = store().tick(T0 + 31 * MIN);
+    expect(fx.sessionComplete).toBe(true);
+    expect(store().status).toBe('session_complete');
+
+    store().play(T0 + 40 * MIN);
+    expect(store().status).toBe('running');
+    expect(store().phase_number).toBe(1);
+    expect(store().phase_type).toBe('focus');
+    expect(store().session_focus_seconds).toBe(0);
   });
 
-  it('session_complete after all phases', () => {
-    useTimerStore.setState({
-      phase_number: 8,
-      status: 'phase_complete',
-    });
-    useTimerStore.getState().advancePhase();
-    expect(useTimerStore.getState().status).toBe('session_complete');
+  it('skip records a partial focus as unfinished, and ignores very short ones', () => {
+    store().play(T0);
+    let fx = store().skip(T0 + 3_000);
+    expect(fx.records).toHaveLength(0);
+    expect(store().phase_type).toBe('short_break');
+
+    setup();
+    store().play(T0);
+    fx = store().skip(T0 + 10 * MIN);
+    expect(fx.records).toHaveLength(1);
+    expect(fx.records[0]).toMatchObject({ completed: false, duration_seconds: 600 });
+    expect(fx.finished).toHaveLength(0);
+  });
+
+  it('reset keeps partial focus time and returns to a fresh session', () => {
+    store().setContext('p1');
+    store().play(T0);
+    const fx = store().reset(T0 + (MIN_RECORD_SECONDS + 30) * 1000);
+    expect(fx.records).toHaveLength(1);
+    expect(fx.records[0].completed).toBe(false);
+    expect(isFreshSession(store())).toBe(true);
+    expect(store().active_project_id).toBe('p1');
+  });
+
+  it('settings changes mid-session do not corrupt the running plan', () => {
+    store().play(T0);
+    store().tick(T0 + 25 * MIN); // now idle on phase 2 of 8
+    store().setSettings({ ...DEFAULT_SETTINGS, phases_per_session: 1, focus_minutes: 50 });
+    expect(store().total_phases).toBe(8);
+    expect(store().phase_number).toBe(2);
+    // Advancing still works (used to throw a TypeError).
+    expect(() => store().skip(T0 + 26 * MIN)).not.toThrow();
+    expect(store().phase_number).toBe(3);
+    expect(store().phase_duration_seconds).toBe(25 * 60);
+  });
+
+  it('settings changes apply immediately when nothing has started', () => {
+    store().setSettings({ ...DEFAULT_SETTINGS, focus_minutes: 50, phases_per_session: 4 });
+    expect(store().remaining_seconds).toBe(50 * 60);
+    expect(store().total_phases).toBe(4);
+  });
+
+  it('warns once when crossing the warning threshold', () => {
+    store().play(T0);
+    expect(store().tick(T0 + 23 * MIN).warn).toBe(false);
+    expect(store().tick(T0 + 24 * MIN + 1000).warn).toBe(true);
+    expect(store().tick(T0 + 24 * MIN + 2000).warn).toBe(false);
+  });
+
+  it('a different account starts with a fresh timer', () => {
+    store().setContext('p1');
+    store().play(T0);
+    store().resetForUser('u2');
+    expect(store().owner_uid).toBe('u2');
+    expect(store().status).toBe('idle');
+    expect(store().active_project_id).toBeUndefined();
   });
 });

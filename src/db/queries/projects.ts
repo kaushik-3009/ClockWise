@@ -1,14 +1,15 @@
 import {
   collection,
   doc,
-  getDoc,
   getDocs,
   setDoc,
+  updateDoc,
   query,
   where,
   writeBatch,
 } from 'firebase/firestore';
 import { getFirebaseFirestore } from '@/lib/firebase';
+import { stripUndefined, toUpdate } from '@/db/clean';
 import type { Project } from '@/types';
 
 function projectRef(userId: string, id: string) {
@@ -19,29 +20,24 @@ function tasksRef(userId: string) {
   return collection(getFirebaseFirestore(), 'users', userId, 'tasks');
 }
 
-function sessionsRef(userId: string) {
-  return collection(getFirebaseFirestore(), 'users', userId, 'sessions');
-}
-
-export async function getProjectById(userId: string, id: string): Promise<Project | undefined> {
-  const snapshot = await getDoc(projectRef(userId, id));
-  if (!snapshot.exists()) return undefined;
-  return { ...(snapshot.data() as Project), id: snapshot.id };
-}
-
-export async function createProject(
+/**
+ * Builds the project and starts the write. The returned project is usable
+ * immediately (the local cache updates synchronously); `written` settles when the
+ * server acknowledges, which never happens while offline — so callers should not
+ * block UI on it, only attach error handling.
+ */
+export function createProject(
   userId: string,
   data: Omit<Project, 'id' | 'created_at' | 'status' | 'user_id'>
-): Promise<Project> {
-  const project: Project = {
+): { project: Project; written: Promise<void> } {
+  const project: Project = stripUndefined({
     ...data,
     user_id: userId,
     id: crypto.randomUUID(),
-    status: 'active',
+    status: 'active' as const,
     created_at: Date.now(),
-  };
-  await setDoc(projectRef(userId, project.id), project);
-  return project;
+  });
+  return { project, written: setDoc(projectRef(userId, project.id), project) };
 }
 
 export async function updateProject(
@@ -49,27 +45,28 @@ export async function updateProject(
   id: string,
   changes: Partial<Omit<Project, 'id' | 'user_id'>>
 ): Promise<void> {
-  await setDoc(projectRef(userId, id), changes, { merge: true });
+  await updateDoc(projectRef(userId, id), toUpdate(changes));
 }
 
+/**
+ * Deletes the project and its tasks. Recorded sessions are intentionally kept —
+ * deleting a project must not rewrite past focus time or break streaks.
+ */
 export async function deleteProject(userId: string, id: string): Promise<void> {
-  const batch = writeBatch(getFirebaseFirestore());
-
-  // Cascade: delete associated tasks and sessions
+  const db = getFirebaseFirestore();
   const tasksSnapshot = await getDocs(query(tasksRef(userId), where('project_id', '==', id)));
-  tasksSnapshot.docs.forEach((d) => batch.delete(d.ref));
-
-  const sessionsSnapshot = await getDocs(query(sessionsRef(userId), where('project_id', '==', id)));
-  sessionsSnapshot.docs.forEach((d) => batch.delete(d.ref));
-
-  batch.delete(projectRef(userId, id));
-  await batch.commit();
+  const refs = [...tasksSnapshot.docs.map((d) => d.ref), projectRef(userId, id)];
+  for (let i = 0; i < refs.length; i += 450) {
+    const batch = writeBatch(db);
+    refs.slice(i, i + 450).forEach((ref) => batch.delete(ref));
+    await batch.commit();
+  }
 }
 
 export async function archiveProject(userId: string, id: string): Promise<void> {
-  await setDoc(projectRef(userId, id), { status: 'archived' }, { merge: true });
+  await updateDoc(projectRef(userId, id), { status: 'archived' });
 }
 
 export async function unarchiveProject(userId: string, id: string): Promise<void> {
-  await setDoc(projectRef(userId, id), { status: 'active' }, { merge: true });
+  await updateDoc(projectRef(userId, id), { status: 'active' });
 }

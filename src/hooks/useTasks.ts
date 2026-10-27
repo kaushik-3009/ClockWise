@@ -1,89 +1,70 @@
-import { useEffect, useState, useCallback } from 'react';
-import { collection, query, orderBy, where, onSnapshot } from 'firebase/firestore';
-import { getFirebaseFirestore } from '@/lib/firebase';
+import { useCallback, useMemo } from 'react';
 import { useAuth } from '@/lib/useAuth';
-import { createTask, updateTask, deleteTask, toggleTaskCompletion } from '@/db/queries/tasks';
+import { useData } from '@/hooks/useData';
+import { reportFailure } from '@/components/ui/Toast';
+import { createTask, updateTask, deleteTask, setTaskCompleted } from '@/db/queries/tasks';
 import type { Task } from '@/types';
 
 export function useTasks(projectId?: string) {
   const { user } = useAuth();
-  const [allTasks, setAllTasks] = useState<Task[]>([]);
-  const [projectTasks, setProjectTasks] = useState<Task[]>([]);
-  const [activeTasks, setActiveTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { tasks: allTasks, loading } = useData();
+  const uid = user?.uid;
 
-  useEffect(() => {
-    if (!user) {
-      setAllTasks([]);
-      setProjectTasks([]);
-      setActiveTasks([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-
-    const base = collection(getFirebaseFirestore(), 'users', user.uid, 'tasks');
-    const constraints = projectId
-      ? [where('project_id', '==', projectId), orderBy('created_at', 'desc')]
-      : [orderBy('created_at', 'desc')];
-    const q = query(base, ...constraints);
-
-    return onSnapshot(
-      q,
-      (snapshot) => {
-        const tasks = snapshot.docs.map((d) => ({ ...(d.data() as Task), id: d.id }));
-        setProjectTasks(tasks);
-        setAllTasks(tasks);
-        setActiveTasks(tasks.filter((t) => !t.is_completed));
-        setLoading(false);
-      },
-      (error) => {
-        console.error('[useTasks] Snapshot error:', error);
-      }
-    );
-  }, [user, projectId]);
+  const tasks = useMemo(
+    () => (projectId ? allTasks.filter((t) => t.project_id === projectId) : allTasks),
+    [allTasks, projectId]
+  );
+  const activeTasks = useMemo(() => tasks.filter((t) => !t.is_completed), [tasks]);
 
   const addTask = useCallback(
-    async (data: { name: string; project_id?: string; is_completed?: boolean }) => {
-      if (!user) throw new Error('Not authenticated');
-      return createTask(user.uid, { ...data, is_completed: data.is_completed ?? false });
+    (
+      data: Omit<Task, 'id' | 'created_at' | 'user_id' | 'is_completed'> & {
+        is_completed?: boolean;
+      }
+    ): Task => {
+      if (!uid) throw new Error('Not authenticated');
+      const { task, written } = createTask(uid, {
+        ...data,
+        is_completed: data.is_completed ?? false,
+      });
+      reportFailure(written, `Couldn't save task "${data.name}"`);
+      return task;
     },
-    [user]
+    [uid]
   );
 
   const editTask = useCallback(
-    async (id: string, changes: Partial<Omit<Task, 'id'>>) => {
-      if (!user) throw new Error('Not authenticated');
-      await updateTask(user.uid, id, changes);
+    (id: string, changes: Partial<Omit<Task, 'id' | 'user_id'>>) => {
+      if (!uid) return;
+      reportFailure(updateTask(uid, id, changes), "Couldn't update task");
     },
-    [user]
+    [uid]
   );
 
   const removeTask = useCallback(
-    async (id: string) => {
-      if (!user) throw new Error('Not authenticated');
-      await deleteTask(user.uid, id);
+    (id: string) => {
+      if (!uid) return;
+      reportFailure(deleteTask(uid, id), "Couldn't delete task");
     },
-    [user]
+    [uid]
   );
 
-  const toggleComplete = useCallback(
-    async (id: string) => {
-      if (!user) throw new Error('Not authenticated');
-      await toggleTaskCompletion(user.uid, id);
+  const setCompleted = useCallback(
+    (id: string, isCompleted: boolean) => {
+      if (!uid) return;
+      reportFailure(setTaskCompleted(uid, id, isCompleted), "Couldn't update task");
     },
-    [user]
+    [uid]
   );
 
   return {
-    tasks: projectTasks,
+    tasks,
     allTasks,
     activeTasks,
-    loading,
+    loading: loading.tasks,
     addTask,
     editTask,
     removeTask,
-    toggleComplete,
+    setCompleted,
   };
 }

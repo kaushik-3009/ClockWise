@@ -56,3 +56,32 @@ export function TaskRowSkeleton() {
     </div>
   );
 }
+
+export function Spinner({ className }: { className?: string }) {
+  return (
+    <div
+      role="status"
+      aria-label="Loading"
+      className={cn(
+        'h-8 w-8 animate-spin rounded-full border-2 border-brand border-t-transparent',
+        className
+      )}
+    />
+  );
+}
+
+export function FullPageSpinner() {
+  return (
+    <div className="flex h-[100dvh] items-center justify-center bg-bg-primary">
+      <Spinner />
+    </div>
+  );
+}
+
+export function PageSpinner() {
+  return (
+    <div className="flex h-64 items-center justify-center">
+      <Spinner />
+    </div>
+  );
+}

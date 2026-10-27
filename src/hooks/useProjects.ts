@@ -1,9 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { getFirebaseFirestore } from '@/lib/firebase';
+import { useCallback, useMemo } from 'react';
 import { useAuth } from '@/lib/useAuth';
+import { useData } from '@/hooks/useData';
+import { reportFailure } from '@/components/ui/Toast';
 import {
-  getProjectById,
   createProject,
   updateProject,
   deleteProject,
@@ -14,100 +13,68 @@ import type { Project, ProjectColor } from '@/types';
 
 export function useProjects() {
   const { user } = useAuth();
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [activeProjects, setActiveProjects] = useState<Project[]>([]);
-  const [archivedProjects, setArchivedProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { projects, loading } = useData();
+  const uid = user?.uid;
 
-  useEffect(() => {
-    if (!user) {
-      setProjects([]);
-      setActiveProjects([]);
-      setArchivedProjects([]);
-      setLoading(false);
-      return;
-    }
+  const activeProjects = useMemo(() => projects.filter((p) => p.status === 'active'), [projects]);
+  const archivedProjects = useMemo(
+    () => projects.filter((p) => p.status === 'archived'),
+    [projects]
+  );
 
-    setLoading(true);
-
-    const q = query(
-      collection(getFirebaseFirestore(), 'users', user.uid, 'projects'),
-      orderBy('created_at', 'desc')
-    );
-
-    return onSnapshot(
-      q,
-      (snapshot) => {
-        const all = snapshot.docs.map((d) => ({ ...(d.data() as Project), id: d.id }));
-        setProjects(all);
-        setActiveProjects(all.filter((p) => p.status === 'active'));
-        setArchivedProjects(all.filter((p) => p.status === 'archived'));
-        setLoading(false);
-      },
-      (error) => {
-        console.error('[useProjects] Snapshot error:', error);
-      }
-    );
-  }, [user]);
-
+  // Mutations update the local cache immediately and report failures via toast;
+  // they deliberately don't block on server acknowledgement (see reportFailure).
   const addProject = useCallback(
-    async (data: { name: string; description?: string; color: ProjectColor }) => {
-      if (!user) throw new Error('Not authenticated');
-      return createProject(user.uid, data);
+    (data: { name: string; description?: string; color: ProjectColor }): Project => {
+      if (!uid) throw new Error('Not authenticated');
+      const { project, written } = createProject(uid, data);
+      reportFailure(written, `Couldn't save project "${data.name}"`);
+      return project;
     },
-    [user]
+    [uid]
   );
 
   const editProject = useCallback(
-    async (id: string, changes: Partial<Omit<Project, 'id'>>) => {
-      if (!user) throw new Error('Not authenticated');
-      await updateProject(user.uid, id, changes);
+    (id: string, changes: Partial<Omit<Project, 'id' | 'user_id'>>) => {
+      if (!uid) return;
+      reportFailure(updateProject(uid, id, changes), "Couldn't update project");
     },
-    [user]
+    [uid]
   );
 
   const removeProject = useCallback(
-    async (id: string) => {
-      if (!user) throw new Error('Not authenticated');
-      await deleteProject(user.uid, id);
+    (id: string) => {
+      if (!uid) return;
+      reportFailure(deleteProject(uid, id), "Couldn't delete project");
     },
-    [user]
+    [uid]
   );
 
   const archive = useCallback(
-    async (id: string) => {
-      if (!user) throw new Error('Not authenticated');
-      await archiveProject(user.uid, id);
+    (id: string) => {
+      if (!uid) return;
+      reportFailure(archiveProject(uid, id), "Couldn't archive project");
     },
-    [user]
+    [uid]
   );
 
   const unarchive = useCallback(
-    async (id: string) => {
-      if (!user) throw new Error('Not authenticated');
-      await unarchiveProject(user.uid, id);
+    (id: string) => {
+      if (!uid) return;
+      reportFailure(unarchiveProject(uid, id), "Couldn't restore project");
     },
-    [user]
-  );
-
-  const getProject = useCallback(
-    async (id: string) => {
-      if (!user) return undefined;
-      return getProjectById(user.uid, id);
-    },
-    [user]
+    [uid]
   );
 
   return {
     projects,
     activeProjects,
     archivedProjects,
-    loading,
+    loading: loading.projects,
     addProject,
     editProject,
     removeProject,
     archive,
     unarchive,
-    getProjectById: getProject,
   };
 }

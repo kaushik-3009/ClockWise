@@ -1,19 +1,16 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/useAuth';
+import { FullPageSpinner } from '@/components/ui/Skeleton';
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-bg-primary">
-        <div className="w-8 h-8 border-2 border-brand border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (loading) return <FullPageSpinner />;
 
   if (!user) {
-    return <Navigate to="/" replace />;
+    // Remember where the user was going so login can send them back there.
+    return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   }
 
   return <>{children}</>;

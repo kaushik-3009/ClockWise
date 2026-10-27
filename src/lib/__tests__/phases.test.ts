@@ -11,6 +11,8 @@ const DEFAULT_SETTINGS: TimerSettings = {
   auto_start: false,
   sound_enabled: true,
   notifications_enabled: false,
+  keep_screen_awake: true,
+  keyboard_shortcuts: true,
   timer_style: 'digital',
   accent_color: '#E8521A',
   ambient_sound: 'off',

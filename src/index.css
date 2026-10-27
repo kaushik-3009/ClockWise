@@ -8,6 +8,10 @@
   --color-brand-hover: color-mix(in srgb, var(--color-brand) 85%, black);
   --color-brand-light: color-mix(in srgb, var(--color-brand) 10%, var(--bg-primary));
   --color-brand-alpha: color-mix(in srgb, var(--color-brand) 15%, transparent);
+  /* Darker shade for white-on-brand fills and brand-coloured text: the raw accent
+     (#E8521A) only reaches 3.7:1 against white, below WCAG AA for text. */
+  --color-brand-solid: color-mix(in srgb, var(--color-brand) 76%, black);
+  --color-brand-text: color-mix(in srgb, var(--color-brand) 76%, black);
 
   /* ── Backgrounds ──────────────────────── */
   --bg-primary: #ffffff;
@@ -18,13 +22,15 @@
   --bg-overlay: rgba(0, 0, 0, 0.5);
 
   /* ── Borders ───────────────────────────── */
-  --border-color: #cccccc;
+  --border-color: #d9d9d9;
   --border-strong: #aaaaaa;
+  /* Form-control borders need 3:1 against the background (WCAG 1.4.11). */
+  --border-input: #8c8c8c;
 
   /* ── Text ──────────────────────────────── */
   --text-primary: #0a0a0a;
   --text-secondary: #555555;
-  --text-muted: #777777;
+  --text-muted: #666666;
   --text-inverse: #ffffff;
 
   /* ── Shadows ───────────────────────────── */
@@ -45,10 +51,14 @@
   /* ── Semantic ───────────────────────────── */
   --color-success: #27ae60;
   --color-success-light: #e8f5e9;
+  --color-success-text: #1b6e3c;
   --color-warning: #f39c12;
+  --color-warning-text: #8a5a00;
   --color-error: #e74c3c;
   --color-error-light: #fdecea;
   --color-error-hover: #c0392b;
+  --color-error-text: #b42318;
+  --color-error-solid: #c0392b;
 
   /* ── Chart ─────────────────────────────── */
   --chart-primary: #e8521a;
@@ -91,11 +101,16 @@
   --bg-tertiary: #2a2a2a;
   --bg-card: #1c1c1c;
   --bg-sidebar: #0d0d0d;
-  --border-color: #444444;
+  --border-color: #333333;
   --border-strong: #555555;
+  --border-input: #6e6e6e;
   --text-primary: #f5f5f5;
   --text-secondary: #bbbbbb;
-  --text-muted: #999999;
+  --text-muted: #a3a3a3;
+  --color-brand-text: color-mix(in srgb, var(--color-brand) 70%, white);
+  --color-success-text: #6ee7a0;
+  --color-warning-text: #fbbf24;
+  --color-error-text: #fca5a5;
   --text-inverse: #0a0a0a;
   --shadow-card: none;
   --shadow-elevated: none;
@@ -119,7 +134,21 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html {
+  /* No rubber-band bounce of the whole app shell on iOS; inner panes scroll. */
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
+  overscroll-behavior: none;
   background-color: var(--bg-primary);
   color: var(--text-primary);
   font-family: 'Manrope', system-ui, sans-serif;
@@ -127,6 +156,65 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Keyboard focus is always visible; mouse/touch focus stays quiet. */
+:focus-visible {
+  outline: 2px solid var(--color-brand-solid);
+  outline-offset: 2px;
+}
+
+/* iOS zooms the page when focusing a field with text smaller than 16px, and the
+   installed app stays zoomed. Keep every form control at 16px on touch-size screens. */
+@media (max-width: 1023px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* ── Safe areas (notch / Dynamic Island / home indicator) ── */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.safe-x {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Toasts sit above the mobile tab bar (64px + home indicator). */
+.toast-region {
+  bottom: calc(76px + env(safe-area-inset-bottom));
+}
+@media (min-width: 1024px) {
+  .toast-region {
+    bottom: 24px;
+  }
+}
+
+/* Modals: a bottom sheet on phones that clears the home indicator, never taller
+   than the visible viewport (so the keyboard can't hide the actions). */
+.modal-root {
+  padding-top: max(env(safe-area-inset-top), 12px);
+}
+.modal-panel {
+  max-height: calc(100dvh - max(env(safe-area-inset-top), 12px));
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@media (min-width: 640px) {
+  .modal-panel {
+    max-height: calc(100dvh - 2rem);
+    padding-bottom: 0;
+  }
+}
+html.modal-open,
+html.modal-open body,
+html.modal-open .app-scroll {
+  overflow: hidden;
 }
 
 /* Route transitions are intentionally short and quiet so motion supports focus. */
@@ -140,6 +228,30 @@ a {
   transition-property: color, background-color, border-color, box-shadow, transform, opacity;
   transition-duration: var(--transition-fast);
   transition-timing-function: ease;
+}
+
+@layer components {
+  .field {
+    @apply h-11 w-full rounded-md border border-border-input bg-bg-secondary px-3.5 text-sm text-text-base outline-none transition-colors placeholder:text-text-muted focus:border-brand focus:ring-2 focus:ring-brand-alpha;
+  }
+  textarea.field {
+    @apply h-auto py-2.5;
+  }
+  .btn {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-brand-solid text-white hover:opacity-90;
+  }
+  .btn-secondary {
+    @apply btn border border-border-input font-medium text-text-sub hover:bg-bg-secondary hover:text-text-base;
+  }
+  .btn-danger {
+    @apply btn border border-border-input font-medium text-error-text hover:border-error hover:bg-error-light;
+  }
+  .btn-danger-solid {
+    @apply btn bg-error-solid text-white hover:opacity-90;
+  }
 }
 
 /* Hide scrollbar on filter chip bars */

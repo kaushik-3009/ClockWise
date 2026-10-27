@@ -2,19 +2,59 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" href="/pwa-192x192.png" />
+    <!-- viewport-fit=cover lets the app draw under the notch/home indicator;
+         layout pads with env(safe-area-inset-*) so nothing is hidden. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>ClockWise — focus timer &amp; time tracker</title>
+    <meta
+      name="description"
+      content="A Pomodoro focus timer that tracks where your time goes, with projects, streaks and analytics. Free, no ads."
+    />
+
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
     <link rel="mask-icon" href="/mask-icon.svg" color="#E8521A" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#E8521A" />
-    <meta name="description" content="Pomodoro focus timer + project time-tracker + analytics dashboard" />
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://i.ytimg.com https://yt3.ggpht.com; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://www.youtube.com; worker-src 'self' blob:;"
-    />
-    <title>ClockWise</title>
+
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+
+    <!-- Installed-app behaviour on iOS -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="ClockWise" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <!-- iOS launch screens (light and dark) -->
+    <link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" href="/splash/iphone-1320x2868-light.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" href="/splash/iphone-1320x2868-dark.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" href="/splash/iphone-1206x2622-light.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" href="/splash/iphone-1206x2622-dark.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" href="/splash/iphone-1290x2796-light.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" href="/splash/iphone-1290x2796-dark.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" href="/splash/iphone-1179x2556-light.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" href="/splash/iphone-1179x2556-dark.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" href="/splash/iphone-1284x2778-light.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" href="/splash/iphone-1284x2778-dark.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" href="/splash/iphone-1170x2532-light.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" href="/splash/iphone-1170x2532-dark.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" href="/splash/iphone-1125x2436-light.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" href="/splash/iphone-1125x2436-dark.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: light)" href="/splash/iphone-828x1792-light.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: dark)" href="/splash/iphone-828x1792-dark.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: light)" href="/splash/iphone-750x1334-light.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: dark)" href="/splash/iphone-750x1334-dark.png" />
+
+    <!-- Applies the saved/system theme before first paint (no white flash). -->
+    <script src="/theme-init.js"></script>
   </head>
   <body>
+    <noscript>ClockWise needs JavaScript to run.</noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

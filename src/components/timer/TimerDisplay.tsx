@@ -11,291 +11,184 @@ interface TimerDisplayProps {
   className?: string;
 }
 
-function AnalogTimerFace({
-  remainingSeconds,
-  totalSeconds = 25 * 60,
+const RADIUS = 90;
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+const rad = (deg: number) => ((deg - 90) * Math.PI) / 180;
+
+// Scales with the smaller of width and height so the dial fits phones in both
+// orientations without pushing the controls off-screen.
+const DIAL_SIZE = 'h-[min(68vw,38dvh,440px)] w-[min(68vw,38dvh,440px)]';
+
+function Hand({
+  deg,
+  length,
+  width,
+  color,
 }: {
-  remainingSeconds: number;
-  totalSeconds?: number;
+  deg: number;
+  length: number;
+  width: number;
+  color: string;
 }) {
-  const total = totalSeconds > 0 ? totalSeconds : 25 * 60;
-  const progress = 1 - remainingSeconds / total;
-  const radius = 90;
-  const circumference = 2 * Math.PI * radius;
-  const dashOffset = circumference * (1 - progress);
-
-  const minuteAngle = (remainingSeconds / 60) * 6 - 90;
-  const secondAngle = (remainingSeconds % 60) * 6 - 90;
-
   return (
-    <div className="relative w-[180px] h-[180px] sm:w-[200px] sm:h-[200px] md:w-[240px] md:h-[240px] lg:w-[280px] lg:h-[280px] xl:w-[320px] xl:h-[320px] 2xl:w-[360px] 2xl:h-[360px] 3xl:w-[420px] 3xl:h-[420px] 4xl:w-[480px] 4xl:h-[480px]">
-      <svg viewBox="0 0 200 200" className="w-full h-full">
-        <circle
-          cx="100"
-          cy="100"
-          r={radius}
-          fill="none"
-          stroke="var(--border-color)"
-          strokeWidth="4"
-        />
-        <circle
-          cx="100"
-          cy="100"
-          r={radius}
-          fill="none"
-          stroke="var(--color-brand)"
-          strokeWidth="4"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={dashOffset}
-          transform="rotate(-90 100 100)"
-          style={{ transition: 'stroke-dashoffset 1s linear' }}
-        />
-        {Array.from({ length: 60 }).map((_, i) => {
-          const angle = (i * 6 - 90) * (Math.PI / 180);
-          const isHour = i % 5 === 0;
-          const innerR = isHour ? 78 : 84;
-          const outerR = 88;
-          const x1 = 100 + innerR * Math.cos(angle);
-          const y1 = 100 + innerR * Math.sin(angle);
-          const x2 = 100 + outerR * Math.cos(angle);
-          const y2 = 100 + outerR * Math.sin(angle);
-          return (
-            <line
-              key={i}
-              x1={x1}
-              y1={y1}
-              x2={x2}
-              y2={y2}
-              stroke={isHour ? 'var(--text-primary)' : 'var(--text-muted)'}
-              strokeWidth={isHour ? 2 : 1}
-              opacity={isHour ? 1 : 0.5}
-            />
-          );
-        })}
-        {[12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((num) => {
-          const angle = ((num % 12) * 30 - 90) * (Math.PI / 180);
-          const r = 68;
-          const x = 100 + r * Math.cos(angle);
-          const y = 100 + r * Math.sin(angle);
-          return (
-            <text
-              key={num}
-              x={x}
-              y={y}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fill="var(--text-secondary)"
-              fontSize="11"
-              fontFamily="Manrope, sans-serif"
-              fontWeight={num === 12 ? '700' : '400'}
-            >
-              {num}
-            </text>
-          );
-        })}
-        <line
-          x1="100"
-          y1="100"
-          x2={100 + 50 * Math.cos(minuteAngle * (Math.PI / 180))}
-          y2={100 + 50 * Math.sin(minuteAngle * (Math.PI / 180))}
-          stroke="var(--text-primary)"
-          strokeWidth="4"
-          strokeLinecap="round"
-        />
-        <line
-          x1="100"
-          y1="100"
-          x2={100 + 72 * Math.cos(secondAngle * (Math.PI / 180))}
-          y2={100 + 72 * Math.sin(secondAngle * (Math.PI / 180))}
-          stroke="var(--color-brand)"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-        <circle cx="100" cy="100" r="4" fill="var(--color-brand)" />
-      </svg>
-    </div>
+    <line
+      x1="100"
+      y1="100"
+      x2={100 + length * Math.cos(rad(deg))}
+      y2={100 + length * Math.sin(rad(deg))}
+      stroke={color}
+      strokeWidth={width}
+      strokeLinecap="round"
+    />
   );
 }
 
+/** Shared dial: track, progress ring, minute ticks and labels. Hands go in `children`. */
+function Dial({
+  progress,
+  labels,
+  children,
+}: {
+  progress: number;
+  labels: string[];
+  children: React.ReactNode;
+}) {
+  return (
+    <svg viewBox="0 0 200 200" className={DIAL_SIZE} aria-hidden="true">
+      <circle
+        cx="100"
+        cy="100"
+        r={RADIUS}
+        fill="none"
+        stroke="var(--border-color)"
+        strokeWidth="4"
+      />
+      <circle
+        cx="100"
+        cy="100"
+        r={RADIUS}
+        fill="none"
+        stroke="var(--color-brand)"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeDasharray={CIRCUMFERENCE}
+        strokeDashoffset={CIRCUMFERENCE * (1 - Math.min(1, Math.max(0, progress)))}
+        transform="rotate(-90 100 100)"
+        style={{ transition: 'stroke-dashoffset 1s linear' }}
+      />
+      {Array.from({ length: 60 }).map((_, i) => {
+        const major = i % 5 === 0;
+        const a = rad(i * 6);
+        const inner = major ? 78 : 83;
+        return (
+          <line
+            key={i}
+            x1={100 + inner * Math.cos(a)}
+            y1={100 + inner * Math.sin(a)}
+            x2={100 + 86 * Math.cos(a)}
+            y2={100 + 86 * Math.sin(a)}
+            stroke={major ? 'var(--text-primary)' : 'var(--text-muted)'}
+            strokeWidth={major ? 2 : 1}
+            opacity={major ? 1 : 0.5}
+          />
+        );
+      })}
+      {labels.map((label, i) => {
+        const a = rad(i * 30);
+        return (
+          <text
+            key={label}
+            x={100 + 67 * Math.cos(a)}
+            y={100 + 67 * Math.sin(a)}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill="var(--text-secondary)"
+            fontSize="10"
+            fontFamily="Manrope, sans-serif"
+            fontWeight={i === 0 ? 700 : 500}
+          >
+            {label}
+          </text>
+        );
+      })}
+      {children}
+      <circle cx="100" cy="100" r="4" fill="var(--color-brand)" />
+    </svg>
+  );
+}
+
+const MINUTE_LABELS = Array.from({ length: 12 }, (_, i) => String(i * 5));
+const HOUR_LABELS = ['12', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11'];
+
+/** Countdown dial: one hand sweeps back towards 0 as the phase runs down. */
+function AnalogTimerFace({ remainingSeconds, total }: { remainingSeconds: number; total: number }) {
+  const handDeg = ((remainingSeconds / 60) % 60) * 6;
+  return (
+    <Dial progress={1 - remainingSeconds / total} labels={MINUTE_LABELS}>
+      <Hand deg={handDeg} length={54} width={3.5} color="var(--text-primary)" />
+    </Dial>
+  );
+}
+
+/** Wall clock showing the current time, with phase progress on the ring. */
 function ClockFace({
   remainingSeconds,
-  totalSeconds = 25 * 60,
+  total,
   clockNow,
 }: {
   remainingSeconds: number;
-  totalSeconds?: number;
+  total: number;
   clockNow: number;
 }) {
-  const total = totalSeconds > 0 ? totalSeconds : 25 * 60;
-  const progress = 1 - remainingSeconds / total;
-  const radius = 90;
-  const circumference = 2 * Math.PI * radius;
-  const dashOffset = circumference * (1 - progress);
-
   const now = new Date(clockNow);
-
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
-  const seconds = now.getSeconds();
-
-  // Hand angles for real time
-  const hourAngle = (hours % 12) * 30 + minutes * 0.5; // 30 deg per hour + 0.5 per minute
-  const minuteAngle = minutes * 6 + seconds * 0.1; // 6 deg per minute + 0.1 per second
-  const secondAngle = seconds * 6; // 6 deg per second
-
+  const h = now.getHours();
+  const m = now.getMinutes();
+  const s = now.getSeconds();
   return (
-    <div className="relative w-[180px] h-[180px] sm:w-[200px] sm:h-[200px] md:w-[240px] md:h-[240px] lg:w-[280px] lg:h-[280px] xl:w-[320px] xl:h-[320px] 2xl:w-[360px] 2xl:h-[360px] 3xl:w-[420px] 3xl:h-[420px] 4xl:w-[480px] 4xl:h-[480px]">
-      <svg viewBox="0 0 200 200" className="w-full h-full">
-        {/* Outer ring (background) */}
-        <circle
-          cx="100"
-          cy="100"
-          r={radius}
-          fill="none"
-          stroke="var(--border-color)"
-          strokeWidth="4"
-        />
-        {/* Progress ring */}
-        <circle
-          cx="100"
-          cy="100"
-          r={radius}
-          fill="none"
-          stroke="var(--color-brand)"
-          strokeWidth="4"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={dashOffset}
-          transform="rotate(-90 100 100)"
-          style={{ transition: 'stroke-dashoffset 1s linear' }}
-        />
-        {/* Minute ticks */}
-        {Array.from({ length: 60 }).map((_, i) => {
-          const angle = (i * 6 - 90) * (Math.PI / 180);
-          const isHour = i % 5 === 0;
-          const innerR = isHour ? 78 : 84;
-          const outerR = 88;
-          const x1 = 100 + innerR * Math.cos(angle);
-          const y1 = 100 + innerR * Math.sin(angle);
-          const x2 = 100 + outerR * Math.cos(angle);
-          const y2 = 100 + outerR * Math.sin(angle);
-          return (
-            <line
-              key={i}
-              x1={x1}
-              y1={y1}
-              x2={x2}
-              y2={y2}
-              stroke={isHour ? 'var(--text-primary)' : 'var(--text-muted)'}
-              strokeWidth={isHour ? 2 : 1}
-              opacity={isHour ? 1 : 0.5}
-            />
-          );
-        })}
-        {/* Hour numbers */}
-        {[12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((num) => {
-          const angle = ((num % 12) * 30 - 90) * (Math.PI / 180);
-          const r = 68;
-          const x = 100 + r * Math.cos(angle);
-          const y = 100 + r * Math.sin(angle);
-          return (
-            <text
-              key={num}
-              x={x}
-              y={y}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fill="var(--text-secondary)"
-              fontSize="11"
-              fontFamily="Manrope, sans-serif"
-              fontWeight={num === 12 ? '700' : '400'}
-            >
-              {num}
-            </text>
-          );
-        })}
-        {/* Hour hand */}
-        <line
-          x1="100"
-          y1="100"
-          x2={100 + 40 * Math.cos((hourAngle - 90) * (Math.PI / 180))}
-          y2={100 + 40 * Math.sin((hourAngle - 90) * (Math.PI / 180))}
-          stroke="var(--text-primary)"
-          strokeWidth="4"
-          strokeLinecap="round"
-        />
-        {/* Minute hand */}
-        <line
-          x1="100"
-          y1="100"
-          x2={100 + 60 * Math.cos((minuteAngle - 90) * (Math.PI / 180))}
-          y2={100 + 60 * Math.sin((minuteAngle - 90) * (Math.PI / 180))}
-          stroke="var(--text-primary)"
-          strokeWidth="3"
-          strokeLinecap="round"
-        />
-        {/* Second hand */}
-        <line
-          x1="100"
-          y1="100"
-          x2={100 + 70 * Math.cos((secondAngle - 90) * (Math.PI / 180))}
-          y2={100 + 70 * Math.sin((secondAngle - 90) * (Math.PI / 180))}
-          stroke="var(--color-brand)"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        />
-        {/* Center dot */}
-        <circle cx="100" cy="100" r="4" fill="var(--color-brand)" />
-      </svg>
-    </div>
+    <Dial progress={1 - remainingSeconds / total} labels={HOUR_LABELS}>
+      <Hand deg={(h % 12) * 30 + m * 0.5} length={36} width={4} color="var(--text-primary)" />
+      <Hand deg={m * 6 + s * 0.1} length={52} width={3} color="var(--text-primary)" />
+      <Hand deg={s * 6} length={56} width={1.5} color="var(--color-brand)" />
+    </Dial>
   );
 }
 
 export const TimerDisplay = memo(function TimerDisplay({
   remainingSeconds,
-  totalSeconds,
+  totalSeconds = 25 * 60,
   timerStyle = 'digital',
   clockNow = Date.now(),
   className,
 }: TimerDisplayProps) {
-  if (timerStyle === 'clock_numeric') {
-    const formatted = formatMMSS(remainingSeconds);
+  const total = totalSeconds > 0 ? totalSeconds : 25 * 60;
+  const formatted = formatMMSS(remainingSeconds);
+
+  if (timerStyle === 'clock_numeric' || timerStyle === 'analog') {
     return (
-      <div className={cn('flex flex-col items-center gap-4', className)}>
-        <ClockFace
-          remainingSeconds={remainingSeconds}
-          totalSeconds={totalSeconds}
-          clockNow={clockNow}
-        />
-        <div className="font-display font-bold italic text-text-base text-2xl sm:text-3xl md:text-4xl 3xl:text-5xl tabular-nums">
+      <div className={cn('flex flex-col items-center gap-3', className)}>
+        {timerStyle === 'analog' ? (
+          <AnalogTimerFace remainingSeconds={remainingSeconds} total={total} />
+        ) : (
+          <ClockFace remainingSeconds={remainingSeconds} total={total} clockNow={clockNow} />
+        )}
+        <div className="font-display text-3xl font-bold italic tabular-nums text-text-base md:text-4xl 3xl:text-5xl">
           {formatted}
         </div>
       </div>
     );
   }
 
-  if (timerStyle === 'analog') {
-    return (
-      <div className={cn('flex flex-col items-center gap-4', className)}>
-        <AnalogTimerFace remainingSeconds={remainingSeconds} totalSeconds={totalSeconds} />
-      </div>
-    );
-  }
-
-  const formatted = formatMMSS(remainingSeconds);
   const [mm, ss] = formatted.split(':');
-
   return (
     <div
       className={cn(
-        'flex items-center font-display font-black italic tabular-nums select-none',
-        'text-[clamp(88px,12vw,220px)] leading-none',
+        'flex select-none items-center font-display font-black italic tabular-nums',
+        'text-[clamp(84px,min(24vw,18dvh),220px)] leading-none',
         className
       )}
     >
       <span className="text-[--text-primary]">{mm}</span>
-      <span className="text-[--color-brand] mx-2 lg:mx-4 3xl:mx-5">:</span>
+      <span className="mx-2 text-[--color-brand] lg:mx-4 3xl:mx-5">:</span>
       <span className="text-[--text-primary]">{ss}</span>
     </div>
   );

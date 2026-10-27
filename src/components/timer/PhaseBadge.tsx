@@ -1,43 +1,28 @@
-import { useMemo } from 'react';
-import { buildPhaseSequence } from '@/lib/phases';
-import { useTimerStore } from '@/stores/timerStore';
+import type { PhaseType } from '@/types';
 
 interface PhaseBadgeProps {
   current: number;
   total: number;
-  className?: string;
+  /** Type of the phase after this one, if any. */
+  next?: PhaseType;
 }
 
-export function PhaseBadge({ current, total, className }: PhaseBadgeProps) {
-  const settings = useTimerStore((s) => s.settings);
+const NEXT_LABEL: Partial<Record<PhaseType, string>> = {
+  short_break: 'Short break next',
+  long_break: 'Long break next',
+  focus: 'Focus next',
+};
 
-  const nextPhaseLabel = useMemo(() => {
-    if (current >= total) return null;
-    const sequence = buildPhaseSequence(settings);
-    const next = sequence[current]; // current is 1-based, so index is current
-    if (!next) return null;
-    if (next.type === 'long_break') return 'Long break next';
-    if (next.type === 'short_break') return 'Short break next';
-    return null;
-  }, [current, total, settings]);
-
+export function PhaseBadge({ current, total, next }: PhaseBadgeProps) {
   return (
     <div className="flex flex-col items-center gap-1.5">
-      <div
-        className={
-          'inline-flex items-center justify-center h-9 3xl:h-10 px-5 3xl:px-6 rounded-full ' +
-          'bg-brand text-white text-sm 3xl:text-base font-bold ' +
-          'animate-[badge-pop_400ms_cubic-bezier(0.34,1.56,0.64,1)] ' +
-          className
-        }
-      >
-        Phase {current}/{total}
+      <div className="inline-flex h-9 items-center justify-center rounded-full bg-brand-solid px-5 text-sm font-bold text-white 3xl:h-10 3xl:px-6 3xl:text-base">
+        Phase {current} of {total}
       </div>
-      {nextPhaseLabel && (
-        <span className="text-xs 3xl:text-sm font-medium text-text-sub tracking-wide uppercase">
-          {nextPhaseLabel}
-        </span>
-      )}
+      {/* Reserve the line even when empty so the layout doesn't jump between phases. */}
+      <span className="h-4 text-xs font-medium uppercase tracking-wide text-text-sub 3xl:text-sm">
+        {next ? NEXT_LABEL[next] : ''}
+      </span>
     </div>
   );
 }

@@ -3,15 +3,18 @@ import {
   doc,
   getDocs,
   setDoc,
+  updateDoc,
   deleteDoc,
   query,
   where,
   orderBy,
 } from 'firebase/firestore';
 import { getFirebaseFirestore } from '@/lib/firebase';
+import { stripUndefined, toUpdate } from '@/db/clean';
+import { parseSession } from '@/db/parse';
 import type { Session } from '@/types';
 
-function sessionsRef(userId: string) {
+export function sessionsRef(userId: string) {
   return collection(getFirebaseFirestore(), 'users', userId, 'sessions');
 }
 
@@ -31,30 +34,19 @@ export async function getSessionsInRange(
     orderBy('started_at', 'desc')
   );
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((d) => ({ ...(d.data() as Session), id: d.id }));
+  return snapshot.docs.flatMap((d) => parseSession(d.id, d.data()) ?? []);
 }
 
-function stripUndefined<T extends Record<string, unknown>>(obj: T): T {
-  const result = {} as Record<string, unknown>;
-  for (const [key, value] of Object.entries(obj)) {
-    if (value !== undefined) {
-      result[key] = value;
-    }
-  }
-  return result as T;
-}
-
-export async function createSession(
+export function createSession(
   userId: string,
   data: Omit<Session, 'id' | 'user_id'>
-): Promise<Session> {
+): { session: Session; written: Promise<void> } {
   const session: Session = stripUndefined({
     ...data,
     user_id: userId,
     id: crypto.randomUUID(),
-  }) as Session;
-  await setDoc(sessionRef(userId, session.id), session);
-  return session;
+  });
+  return { session, written: setDoc(sessionRef(userId, session.id), session) };
 }
 
 export async function updateSession(
@@ -62,7 +54,7 @@ export async function updateSession(
   id: string,
   changes: Partial<Omit<Session, 'id' | 'user_id'>>
 ): Promise<void> {
-  await setDoc(sessionRef(userId, id), changes, { merge: true });
+  await updateDoc(sessionRef(userId, id), toUpdate(changes));
 }
 
 export async function deleteSession(userId: string, id: string): Promise<void> {

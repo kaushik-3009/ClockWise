@@ -1,4 +1,5 @@
-import { X, Keyboard } from 'lucide-react';
+import { Modal } from '@/components/ui/Modal';
+import { useTimerStore } from '@/stores/timerStore';
 
 interface ShortcutsModalProps {
   open: boolean;
@@ -6,45 +7,38 @@ interface ShortcutsModalProps {
 }
 
 const SHORTCUTS = [
-  { key: 'Space', action: 'Play / Pause timer' },
-  { key: 'R', action: 'Reset timer' },
-  { key: 'S', action: 'Skip current phase' },
-  { key: 'Esc', action: 'Pause timer' },
-  { key: '?', action: 'Show keyboard shortcuts' },
+  { key: 'Space', action: 'Start / pause' },
+  { key: 'R', action: 'Reset the timer' },
+  { key: 'S', action: 'Skip to the next phase' },
+  { key: 'Esc', action: 'Pause' },
+  { key: '?', action: 'Show this list' },
 ];
 
 export function ShortcutsModal({ open, onClose }: ShortcutsModalProps) {
-  if (!open) return null;
-
+  const enabled = useTimerStore((s) => s.settings.keyboard_shortcuts);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-bg-card rounded-lg p-6 w-full max-w-[360px] animate-[slideUp_200ms_cubic-bezier(0.34,1.56,0.64,1)]">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <Keyboard className="w-5 h-5 text-text-sub" />
-            <h2 className="text-base font-bold text-text-base">Keyboard Shortcuts</h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1 text-text-muted hover:text-text-base transition-colors"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="flex flex-col gap-3">
-          {SHORTCUTS.map((s) => (
-            <div key={s.key} className="flex items-center justify-between">
-              <span className="text-sm text-text-sub">{s.action}</span>
-              <kbd className="px-2 py-1 rounded bg-bg-tertiary border border-border-base font-mono text-xs text-text-base min-w-[40px] text-center">
+    <Modal open={open} onClose={onClose} title="Keyboard shortcuts" className="max-w-[380px]">
+      {!enabled && (
+        <p className="mb-4 rounded-md bg-bg-secondary p-3 text-sm text-text-sub">
+          Single-key shortcuts are turned off. You can turn them on in Settings.
+        </p>
+      )}
+      <dl className="flex flex-col gap-3">
+        {SHORTCUTS.map((s) => (
+          <div key={s.key} className="flex items-center justify-between gap-4">
+            <dt className="text-sm text-text-sub">{s.action}</dt>
+            <dd>
+              <kbd className="inline-block min-w-[44px] rounded border border-border-base bg-bg-tertiary px-2 py-1 text-center font-mono text-xs text-text-base">
                 {s.key}
               </kbd>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-5 text-xs text-text-muted">
+        Shortcuts are ignored while typing, while a dialog is open, and when combined with ⌘, Ctrl
+        or Alt.
+      </p>
+    </Modal>
   );
 }

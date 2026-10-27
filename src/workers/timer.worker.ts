@@ -1,22 +1,14 @@
-// Timer Worker — sends 'tick' every 1 000 ms
+// Heartbeat worker: posts 'tick' once a second while started. The timer itself is
+// computed from wall-clock timestamps, so this only decides *when* to re-check —
+// a worker interval keeps firing in background desktop tabs, where main-thread
+// timers are throttled to once a minute.
 let intervalId: ReturnType<typeof setInterval> | null = null;
-let clockIntervalId: ReturnType<typeof setInterval> | null = null;
 
-self.onmessage = (e: MessageEvent<'start' | 'stop' | 'clock_start' | 'clock_stop'>) => {
-  if (e.data === 'start') {
-    if (intervalId) return;
+self.onmessage = (e: MessageEvent<'start' | 'stop'>) => {
+  if (e.data === 'start' && intervalId === null) {
     intervalId = setInterval(() => self.postMessage('tick'), 1000);
-  }
-  if (e.data === 'stop') {
-    if (intervalId) clearInterval(intervalId);
+  } else if (e.data === 'stop' && intervalId !== null) {
+    clearInterval(intervalId);
     intervalId = null;
-  }
-  if (e.data === 'clock_start' && !clockIntervalId) {
-    self.postMessage({ type: 'clock', now: Date.now() });
-    clockIntervalId = setInterval(() => self.postMessage({ type: 'clock', now: Date.now() }), 1000);
-  }
-  if (e.data === 'clock_stop') {
-    if (clockIntervalId) clearInterval(clockIntervalId);
-    clockIntervalId = null;
   }
 };

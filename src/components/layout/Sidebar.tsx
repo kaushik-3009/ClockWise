@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import {
   Timer,
@@ -16,74 +17,90 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/useAuth';
 import { cn } from '@/lib/cn';
-import { useUiStore } from '@/stores/uiStore';
+import { useUiStore, resolveTheme } from '@/stores/uiStore';
 import { useSettings } from '@/hooks/useSettings';
 import { useSessions } from '@/hooks/useSessions';
 import { computeCurrentWeekFocusSeconds } from '@/lib/stats';
 import { formatDuration } from '@/lib/time';
 import { SidebarFocusIndicator } from '@/components/layout/SidebarFocusIndicator';
-import { SettingsModal } from '@/components/ui/SettingsModal';
-import { useState, useMemo } from 'react';
+import { Logo } from '@/components/brand/Logo';
 
-const navItems = [
+const NAV_ITEMS = [
   { path: '/timer', label: 'Timer', icon: Timer },
-  { path: '/statistics', label: 'Statistics', icon: BarChart3 },
   { path: '/projects', label: 'Projects', icon: FolderKanban },
-  { path: '/templates', label: 'Templates', icon: Layers },
+  { path: '/statistics', label: 'Statistics', icon: BarChart3 },
   { path: '/history', label: 'History', icon: History },
   { path: '/streaks', label: 'Streaks', icon: Flame },
   { path: '/insights', label: 'Insights', icon: Lightbulb },
+  { path: '/templates', label: 'Templates', icon: Layers },
 ];
 
+const itemClass = (collapsed: boolean, active = false) =>
+  cn(
+    'flex min-h-10 items-center gap-3 rounded-md px-3 text-sm transition-colors duration-fast',
+    active
+      ? 'bg-brand-light font-semibold text-brand-text'
+      : 'text-text-sub hover:bg-bg-secondary hover:text-text-base',
+    collapsed && 'justify-center'
+  );
+
 export function Sidebar() {
-  const { sidebarCollapsed, toggleSidebar, theme, toggleTheme } = useUiStore();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const { sidebarCollapsed: collapsed, toggleSidebar, theme, setTheme } = useUiStore();
   const { settings } = useSettings();
   const { sessions } = useSessions();
   const { logOut } = useAuth();
 
   const weekFocusSeconds = useMemo(() => computeCurrentWeekFocusSeconds(sessions), [sessions]);
-  const weekFocusHours = weekFocusSeconds / 3600;
-  const goalHours = settings.weekly_goal_hours || 1;
-  const goalPct = Math.min((weekFocusHours / goalHours) * 100, 100);
+  const goalHours = settings.weekly_goal_hours;
+  const goalPct = goalHours > 0 ? Math.min((weekFocusSeconds / 3600 / goalHours) * 100, 100) : 0;
+  const isDark = resolveTheme(theme) === 'dark';
+
+  // When collapsed, labels are hidden visually — keep them for assistive tech and tooltips.
+  const label = (text: string) =>
+    collapsed ? (
+      <span className="sr-only">{text}</span>
+    ) : (
+      <span className="whitespace-nowrap">{text}</span>
+    );
 
   return (
-    <div className="flex flex-col h-full py-4">
-      {/* Logo row */}
+    <div className="flex h-full flex-col py-4">
       <Link
-        to="/"
-        className="flex items-center gap-3 px-4 pb-4 shrink-0 hover:opacity-80 transition-opacity"
-      >
-        <div className="w-9 h-9 rounded-[10px] bg-brand flex items-center justify-center shrink-0">
-          <Flame className="w-5 h-5 text-white" />
-        </div>
-        {!sidebarCollapsed && (
-          <span className="font-semibold text-base text-text-base whitespace-nowrap transition-opacity duration-fast">
-            ClockWise
-          </span>
+        to="/timer"
+        aria-label="ClockWise — go to the timer"
+        className={cn(
+          'mb-4 flex shrink-0 items-center px-4 transition-opacity hover:opacity-80',
+          collapsed && 'justify-center px-0'
         )}
+      >
+        <Logo size="md" withWordmark={!collapsed} />
       </Link>
 
-      {/* Focus indicator */}
-      {!sidebarCollapsed && (
+      {!collapsed && (
         <div className="px-4 pb-4">
           <SidebarFocusIndicator className="w-full justify-start" />
         </div>
       )}
 
-      {/* Weekly goal */}
-      {!sidebarCollapsed && settings.weekly_goal_hours > 0 && (
+      {!collapsed && goalHours > 0 && (
         <div className="px-4 pb-4">
-          <div className="bg-bg-secondary rounded-md p-3">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] font-medium text-text-sub">Weekly Goal</span>
-              <span className="text-[11px] text-text-muted">
+          <div className="rounded-md bg-bg-secondary p-3">
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-xs font-medium text-text-sub">Weekly goal</span>
+              <span className="text-xs text-text-sub">
                 {formatDuration(weekFocusSeconds)} / {goalHours}h
               </span>
             </div>
-            <div className="h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
+            <div
+              className="h-1.5 overflow-hidden rounded-full bg-bg-tertiary"
+              role="progressbar"
+              aria-label="Weekly goal progress"
+              aria-valuenow={Math.round(goalPct)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
               <div
-                className="h-full bg-brand rounded-full transition-all duration-slow"
+                className="h-full rounded-full bg-brand transition-all duration-slow"
                 style={{ width: `${goalPct}%` }}
               />
             </div>
@@ -91,98 +108,66 @@ export function Sidebar() {
         </div>
       )}
 
-      {/* Nav items */}
-      <nav className="flex flex-col gap-0.5 px-2 flex-1">
-        {navItems.map((item) => (
+      <nav aria-label="Main" className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2">
+        {NAV_ITEMS.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors duration-fast',
-                isActive
-                  ? 'bg-brand-light text-brand font-semibold'
-                  : 'text-text-sub hover:text-text-base hover:bg-bg-secondary',
-                sidebarCollapsed && 'justify-center'
-              )
-            }
+            title={collapsed ? item.label : undefined}
+            className={({ isActive }) => itemClass(collapsed, isActive)}
           >
-            <item.icon className="w-5 h-5 shrink-0" />
-            {!sidebarCollapsed && (
-              <span className="whitespace-nowrap transition-opacity duration-fast">
-                {item.label}
-              </span>
-            )}
+            <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+            {label(item.label)}
           </NavLink>
         ))}
       </nav>
 
-      {/* Bottom actions */}
-      <div className="flex flex-col gap-0.5 px-2 shrink-0">
-        {/* Settings */}
-        <button
-          onClick={() => setSettingsOpen(true)}
-          className={cn(
-            'flex items-center gap-3 px-3 py-2 rounded-md text-sm text-text-sub hover:text-text-base hover:bg-bg-secondary transition-colors duration-fast',
-            sidebarCollapsed && 'justify-center'
-          )}
+      <div className="flex shrink-0 flex-col gap-0.5 px-2">
+        <NavLink
+          to="/settings"
+          title={collapsed ? 'Settings' : undefined}
+          className={({ isActive }) => itemClass(collapsed, isActive)}
         >
-          <Settings className="w-5 h-5 shrink-0" />
-          {!sidebarCollapsed && <span className="whitespace-nowrap">Settings</span>}
-        </button>
-
-        {/* Theme toggle */}
+          <Settings className="h-5 w-5 shrink-0" aria-hidden="true" />
+          {label('Settings')}
+        </NavLink>
         <button
-          onClick={toggleTheme}
-          className={cn(
-            'flex items-center gap-3 px-3 py-2 rounded-md text-sm text-text-sub hover:text-text-base hover:bg-bg-secondary transition-colors duration-fast',
-            sidebarCollapsed && 'justify-center'
-          )}
+          type="button"
+          onClick={() => setTheme(isDark ? 'light' : 'dark')}
+          title={collapsed ? (isDark ? 'Light mode' : 'Dark mode') : undefined}
+          className={itemClass(collapsed)}
         >
-          {theme === 'light' ? (
-            <Moon className="w-5 h-5 shrink-0" />
+          {isDark ? (
+            <Sun className="h-5 w-5 shrink-0" aria-hidden="true" />
           ) : (
-            <Sun className="w-5 h-5 shrink-0" />
+            <Moon className="h-5 w-5 shrink-0" aria-hidden="true" />
           )}
-          {!sidebarCollapsed && (
-            <span className="whitespace-nowrap">
-              {theme === 'light' ? 'Dark mode' : 'Light mode'}
-            </span>
-          )}
+          {label(isDark ? 'Light mode' : 'Dark mode')}
         </button>
-
-        {/* Log out */}
         <button
-          onClick={() => logOut()}
-          className={cn(
-            'flex items-center gap-3 px-3 py-2 rounded-md text-sm text-text-sub hover:text-text-base hover:bg-bg-secondary transition-colors duration-fast',
-            sidebarCollapsed && 'justify-center'
-          )}
+          type="button"
+          onClick={() => void logOut()}
+          title={collapsed ? 'Log out' : undefined}
+          className={itemClass(collapsed)}
         >
-          <LogOut className="w-5 h-5 shrink-0" />
-          {!sidebarCollapsed && <span className="whitespace-nowrap">Log out</span>}
+          <LogOut className="h-5 w-5 shrink-0" aria-hidden="true" />
+          {label('Log out')}
         </button>
-
-        {/* Collapse toggle */}
         <button
+          type="button"
           onClick={toggleSidebar}
-          className={cn(
-            'flex items-center gap-3 px-3 py-2 rounded-md text-sm text-text-sub hover:text-text-base hover:bg-bg-secondary transition-colors duration-fast',
-            sidebarCollapsed && 'justify-center'
-          )}
+          aria-expanded={!collapsed}
+          title={collapsed ? 'Expand sidebar' : undefined}
+          className={itemClass(collapsed)}
         >
-          {sidebarCollapsed ? (
-            <ChevronRight className="w-5 h-5 shrink-0" />
+          {collapsed ? (
+            <ChevronRight className="h-5 w-5 shrink-0" aria-hidden="true" />
           ) : (
-            <>
-              <ChevronLeft className="w-5 h-5 shrink-0" />
-              <span className="whitespace-nowrap">Collapse</span>
-            </>
+            <ChevronLeft className="h-5 w-5 shrink-0" aria-hidden="true" />
           )}
+          {label(collapsed ? 'Expand sidebar' : 'Collapse')}
         </button>
       </div>
-
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

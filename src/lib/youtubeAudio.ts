@@ -37,7 +37,7 @@ function loadYouTubeApi(): Promise<void> {
   if (window.YT?.Player) return Promise.resolve();
   if (apiLoadPromise) return apiLoadPromise;
 
-  apiLoadPromise = new Promise((resolve) => {
+  apiLoadPromise = new Promise((resolve, reject) => {
     const prevCallback = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = () => {
       prevCallback?.();
@@ -46,6 +46,12 @@ function loadYouTubeApi(): Promise<void> {
     const script = document.createElement('script');
     script.src = 'https://www.youtube.com/iframe_api';
     script.async = true;
+    // Blocked by a network filter/ad blocker: fail fast and allow a retry later.
+    script.onerror = () => {
+      script.remove();
+      apiLoadPromise = null;
+      reject(new Error('Could not load the YouTube player.'));
+    };
     document.head.appendChild(script);
   });
 

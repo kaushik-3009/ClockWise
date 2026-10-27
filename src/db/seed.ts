@@ -1,8 +1,15 @@
-import { collection, getDocs, writeBatch, doc } from 'firebase/firestore';
+import {
+  collection,
+  getDoc,
+  getDocs,
+  writeBatch,
+  doc,
+  type DocumentReference,
+} from 'firebase/firestore';
 import { getFirebaseFirestore } from '@/lib/firebase';
-import { formatDateKey } from '@/lib/time';
+import { stripUndefined } from '@/db/clean';
 import { DEFAULT_SETTINGS } from '@/db/queries/settings';
-import type { Project, Task, Session, DailyStreak, TimerTemplate } from '@/types';
+import type { Project, Task, Session, TimerTemplate } from '@/types';
 
 const PROJECT_SEEDS: Omit<Project, 'id' | 'created_at' | 'user_id'>[] = [
   {
@@ -117,16 +124,6 @@ function pick<T>(arr: T[]): T {
   return arr[randInt(0, arr.length - 1)];
 }
 
-function stripUndefinedSession(obj: Session): Session {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj as unknown as Record<string, unknown>)) {
-    if (value !== undefined) {
-      result[key] = value;
-    }
-  }
-  return result as unknown as Session;
-}
-
 function weightedPick<T>(arr: T[], weights: number[]): T {
   const total = weights.reduce((a, b) => a + b, 0);
   let r = Math.random() * total;
@@ -137,34 +134,38 @@ function weightedPick<T>(arr: T[], weights: number[]): T {
   return arr[arr.length - 1];
 }
 
+/** Commit writes in chunks — a single Firestore batch is capped at 500 operations. */
+async function commitInChunks(
+  ops: Array<{ ref: DocumentReference; data?: object }>,
+  chunkSize = 450
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  for (let i = 0; i < ops.length; i += chunkSize) {
+    const batch = writeBatch(db);
+    for (const op of ops.slice(i, i + chunkSize)) {
+      if (op.data) batch.set(op.ref, op.data);
+      else batch.delete(op.ref);
+    }
+    await batch.commit();
+  }
+}
+
 async function hasExistingData(userId: string): Promise<boolean> {
   const db = getFirebaseFirestore();
   const projectsSnap = await getDocs(collection(db, 'users', userId, 'projects'));
   return projectsSnap.size > 0;
 }
 
-export async function seedNewUser(userId: string, includeDemoData = true): Promise<void> {
+export async function seedNewUser(userId: string, includeDemoData = false): Promise<void> {
   if (!includeDemoData) {
     await seedDefaultsOnly(userId);
     return;
   }
 
-  console.log('[seed] Starting seed for user:', userId);
+  if (await hasExistingData(userId)) return;
 
-  try {
-    const hasData = await hasExistingData(userId);
-    if (hasData) {
-      console.log('[seed] User already has data, skipping seed.');
-      return;
-    }
-  } catch (err) {
-    console.error('[seed] Failed to check existing data (rules not deployed?):', err);
-    throw err;
-  }
-
-  console.log('[seed] Populating demo data...');
   const db = getFirebaseFirestore();
-  const batch = writeBatch(db);
+  const ops: Array<{ ref: DocumentReference; data: object }> = [];
   const now = Date.now();
 
   // Insert projects
@@ -175,7 +176,7 @@ export async function seedNewUser(userId: string, includeDemoData = true): Promi
     created_at: now - randInt(0, 90 * 24 * 60 * 60 * 1000),
   }));
   const projectCol = collection(db, 'users', userId, 'projects');
-  projects.forEach((p) => batch.set(doc(projectCol, p.id), p));
+  projects.forEach((p) => ops.push({ ref: doc(projectCol, p.id), data: p }));
 
   // Insert tasks
   const tasks: Task[] = TASK_SEEDS.map((t) => {
@@ -192,7 +193,7 @@ export async function seedNewUser(userId: string, includeDemoData = true): Promi
     };
   });
   const taskCol = collection(db, 'users', userId, 'tasks');
-  tasks.forEach((t) => batch.set(doc(taskCol, t.id), t));
+  tasks.forEach((t) => ops.push({ ref: doc(taskCol, t.id), data: t }));
 
   // Generate sessions
   const sessions: Session[] = [];
@@ -281,7 +282,7 @@ export async function seedNewUser(userId: string, includeDemoData = true): Promi
         });
       }
 
-      if ((s + 1) % 4 === 0 && s < sessionCount - 1) {
+      if (s % 2 === 1 && s < sessionCount - 1) {
         const longBreakDuration = randInt(12, 18) * 60;
         const longBreakStart = new Date(dayBase);
         longBreakStart.setHours(hour + 1, randInt(0, 59), 0, 0);
@@ -305,102 +306,75 @@ export async function seedNewUser(userId: string, includeDemoData = true): Promi
   }
 
   const sessionCol = collection(db, 'users', userId, 'sessions');
-  sessions.forEach((s) => batch.set(doc(sessionCol, s.id), stripUndefinedSession(s)));
+  sessions.forEach((s) => ops.push({ ref: doc(sessionCol, s.id), data: stripUndefined(s) }));
 
-  // Build streaks from sessions
-  const streakMap = new Map<string, DailyStreak>();
-  for (const s of sessions) {
-    if (s.type !== 'focus') continue;
-    const dateKey = formatDateKey(new Date(s.started_at));
-    const existing = streakMap.get(dateKey);
-    if (existing) {
-      existing.focus_seconds += s.duration_seconds;
-      existing.sessions_started += 1;
-      if (s.completed) existing.sessions_completed += 1;
-      existing.goal_met = existing.focus_seconds >= 25 * 60;
-    } else {
-      streakMap.set(dateKey, {
-        user_id: userId,
-        date: dateKey,
-        focus_seconds: s.duration_seconds,
-        sessions_started: 1,
-        sessions_completed: s.completed ? 1 : 0,
-        goal_met: s.duration_seconds >= 25 * 60,
-      });
-    }
-  }
-  const streakCol = collection(db, 'users', userId, 'streaks');
-  Array.from(streakMap.values()).forEach((st) => batch.set(doc(streakCol, st.date), st));
-
-  try {
-    await batch.commit();
-    console.log('[seed] Batch commit succeeded');
-  } catch (err) {
-    console.error('[seed] Batch commit failed:', err);
-    throw err;
-  }
-
+  await commitInChunks(ops);
   await seedDefaultsOnly(userId);
-
-  console.log(
-    `[seed] Done: ${projects.length} projects, ${tasks.length} tasks, ${sessions.length} sessions, ${streakMap.size} streak days.`
-  );
 }
 
+/**
+ * Make sure the account has the stock templates and a settings document.
+ * Only ever creates missing things — it never deletes or overwrites, so a
+ * user's own templates (even ones sharing a default's name) and their settings
+ * are always safe.
+ */
 export async function seedDefaultsOnly(userId: string): Promise<void> {
   const db = getFirebaseFirestore();
   const templatesCol = collection(db, 'users', userId, 'templates');
-  const existing = await getDocs(templatesCol);
+  const settingsRef = doc(db, 'users', userId, 'settings', 'default');
+  const [existing, settingsSnap] = await Promise.all([getDocs(templatesCol), getDoc(settingsRef)]);
 
-  // Group existing docs by name so we can also collapse any duplicates left
-  // over from before default templates had fixed ids (a prior version of this
-  // seeding logic used crypto.randomUUID(), which could double-create entries
-  // on retries/races). Grouping by name self-heals those accounts too.
-  const byName = new Map<string, string[]>();
-  existing.docs.forEach((d) => {
-    const name = (d.data() as { name?: string }).name;
-    if (!name) return;
-    const ids = byName.get(name) ?? [];
-    ids.push(d.id);
-    byName.set(name, ids);
-  });
-
+  const existingIds = new Set(existing.docs.map((d) => d.id));
   const now = Date.now();
   const batch = writeBatch(db);
+  let writes = 0;
 
-  DEFAULT_TEMPLATES.forEach((t) => {
-    const matches = byName.get(t.name) ?? [];
-    if (matches.length === 0) {
-      // Missing entirely — create the canonical fixed-id doc.
-      batch.set(doc(templatesCol, t.id), { ...t, user_id: userId, created_at: now });
-    } else if (matches.length > 1) {
-      // Duplicates — collapse to a single canonical doc.
-      matches.forEach((id) => batch.delete(doc(templatesCol, id)));
-      batch.set(doc(templatesCol, t.id), { ...t, user_id: userId, created_at: now });
-    }
-    // Exactly one match already — leave it alone (may be user-customized).
-  });
+  // Fixed ids make this idempotent across tabs, devices and retries.
+  if (existing.empty) {
+    DEFAULT_TEMPLATES.forEach((t, i) => {
+      if (existingIds.has(t.id)) return;
+      batch.set(doc(templatesCol, t.id), { ...t, user_id: userId, created_at: now + i });
+      writes++;
+    });
+  }
 
-  // Ensure default settings document exists
-  batch.set(doc(db, 'users', userId, 'settings', 'default'), DEFAULT_SETTINGS);
+  if (!settingsSnap.exists()) {
+    batch.set(settingsRef, DEFAULT_SETTINGS);
+    writes++;
+  }
 
-  await batch.commit();
+  if (writes > 0) await batch.commit();
 }
 
 export async function clearUserData(userId: string): Promise<void> {
   const db = getFirebaseFirestore();
-  // 'templates' is intentionally excluded — the default templates should
-  // always be available, even after a data wipe or on a brand new account.
+  // Templates are kept so the stock ones stay available after a wipe.
+  // 'streaks' is a legacy collection from older versions; clear it too.
   const collections = ['projects', 'tasks', 'sessions', 'streaks', 'settings'] as const;
   for (const name of collections) {
     const snap = await getDocs(collection(db, 'users', userId, name));
-    const batch = writeBatch(db);
-    snap.docs.forEach((d) => batch.delete(d.ref));
-    await batch.commit();
+    await commitInChunks(snap.docs.map((d) => ({ ref: d.ref })));
   }
-  // Restores default settings and (re-)seeds default templates if they were ever removed.
   await seedDefaultsOnly(userId);
-  console.log(`[seed] Cleared data for user ${userId}.`);
+}
+
+/** Delete every document the user owns (used when deleting the account). */
+export async function deleteAllUserData(userId: string): Promise<void> {
+  const db = getFirebaseFirestore();
+  const collections = [
+    'projects',
+    'tasks',
+    'sessions',
+    'streaks',
+    'settings',
+    'templates',
+    'backups',
+  ];
+  for (const name of collections) {
+    const snap = await getDocs(collection(db, 'users', userId, name));
+    await commitInChunks(snap.docs.map((d) => ({ ref: d.ref })));
+  }
+  await commitInChunks([{ ref: doc(db, 'users', userId) }]);
 }
 
 export async function seedUserDemoData(userId: string): Promise<void> {

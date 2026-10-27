@@ -10,13 +10,7 @@ export type ProjectColor =
 
 export type PhaseType = 'focus' | 'short_break' | 'long_break';
 
-export type TimerStatus =
-  | 'idle'
-  | 'running'
-  | 'paused'
-  | 'completing'
-  | 'phase_complete'
-  | 'session_complete';
+export type TimerStatus = 'idle' | 'running' | 'paused' | 'session_complete';
 
 export type TimerStyle = 'digital' | 'clock_numeric' | 'analog';
 
@@ -65,21 +59,16 @@ export interface TimerSettings {
   auto_start: boolean;
   sound_enabled: boolean;
   notifications_enabled: boolean;
+  /** Ask the device to keep the screen on while a phase is running (Wake Lock). */
+  keep_screen_awake: boolean;
+  /** Single-key timer shortcuts (Space/R/S). Can be turned off per WCAG 2.1.4. */
+  keyboard_shortcuts: boolean;
   timer_style: TimerStyle;
   accent_color: string;
   ambient_sound: 'off' | 'rain' | 'white' | 'brown' | 'cafe';
   ambient_volume: number;
   weekly_goal_hours: number;
   warn_before_seconds: number;
-}
-
-export interface DailyStreak {
-  user_id: string;
-  date: string;
-  focus_seconds: number;
-  sessions_started: number;
-  sessions_completed: number;
-  goal_met: boolean;
 }
 
 export interface TimerTemplate {
@@ -94,32 +83,12 @@ export interface TimerTemplate {
   created_at: number;
 }
 
-export interface TimerState {
-  status: TimerStatus;
-  phase_type: PhaseType;
-  phase_number: number;
-  total_phases: number;
-  remaining_seconds: number;
-  elapsed_seconds: number;
-  active_project_id?: string;
-  active_task_id?: string;
-  active_session_id?: string;
-  clock_now: number;
-  settings: TimerSettings;
-}
-
 export interface ExportData {
   version: 1;
   exported_at: string;
   projects: Project[];
   tasks: Task[];
   sessions: Session[];
-  streaks: DailyStreak[];
+  templates?: TimerTemplate[];
   settings: TimerSettings | null;
-}
-
-export interface BackupRecord {
-  id: 'auto';
-  data: ExportData;
-  created_at: number;
 }

@@ -1,9 +1,18 @@
 import { initializeApp, type FirebaseApp, type FirebaseOptions } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import {
+  initializeAuth,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
+  inMemoryPersistence,
+  type Auth,
+} from 'firebase/auth';
 import {
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
+  memoryLocalCache,
+  terminate,
+  clearIndexedDbPersistence,
   type Firestore,
 } from 'firebase/firestore';
 
@@ -39,19 +48,69 @@ export function getFirebaseApp(): FirebaseApp {
   return app;
 }
 
-export function getFirebaseAuth() {
-  return getAuth(getFirebaseApp());
+let auth: Auth | null = null;
+
+export function getFirebaseAuth(): Auth {
+  if (!auth) {
+    // initializeAuth (instead of getAuth) skips the popup/redirect resolver.
+    // We only use email/password, and the resolver loads apis.google.com/js/api.js
+    // plus an auth iframe — on iOS that blocks onAuthStateChanged until it loads
+    // or times out, which shows up as an endless spinner on launch.
+    auth = initializeAuth(getFirebaseApp(), {
+      persistence: [indexedDBLocalPersistence, browserLocalPersistence, inMemoryPersistence],
+    });
+  }
+  return auth;
 }
 
 let firestore: Firestore | null = null;
 
 export function getFirebaseFirestore(): Firestore {
   if (!firestore) {
-    // Persistent local cache enables offline reads/writes (synced when back online)
-    // and works across multiple open tabs.
-    firestore = initializeFirestore(getFirebaseApp(), {
-      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-    });
+    const base = { ignoreUndefinedProperties: true } as const;
+    try {
+      // Persistent local cache enables offline reads/writes (synced when back online)
+      // and works across multiple open tabs.
+      firestore = initializeFirestore(getFirebaseApp(), {
+        ...base,
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      });
+    } catch (err) {
+      // IndexedDB can be unavailable (private mode, storage pressure on iOS).
+      // Fall back to an in-memory cache rather than failing to start.
+      console.warn('[firebase] Persistent cache unavailable, using memory cache:', err);
+      firestore = initializeFirestore(getFirebaseApp(), {
+        ...base,
+        localCache: memoryLocalCache(),
+      });
+    }
   }
   return firestore;
+}
+
+/**
+ * Shut down Firestore and wipe its on-device cache so the next account to sign in
+ * on this device can't see the previous user's data. A fresh instance is created
+ * on the next getFirebaseFirestore() call.
+ */
+export async function resetFirestore(): Promise<void> {
+  if (!firestore) return;
+  const db = firestore;
+  firestore = null;
+  try {
+    await terminate(db);
+    await clearIndexedDbPersistence(db);
+  } catch (err) {
+    console.warn('[firebase] Could not clear local cache:', err);
+  }
+}
+
+/**
+ * Firestore's IndexedDB layer can die after iOS suspends and resumes the PWA
+ * ("IndexedDB connection lost" / "INTERNAL ASSERTION FAILED"). Once that happens
+ * every listener is dead, so the only reliable recovery is a reload.
+ */
+export function isFatalFirestoreError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  return /INTERNAL ASSERTION FAILED|IndexedDB|database connection is closing/i.test(message);
 }
