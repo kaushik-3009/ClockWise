@@ -1,468 +1,284 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { BarChart3, Target } from 'lucide-react';
-import {
-  startOfWeek,
-  endOfWeek,
-  startOfDay,
-  endOfDay,
-  startOfMonth,
-  endOfMonth,
-  addWeeks,
-  subWeeks,
-  addDays,
-  subDays,
-  addMonths,
-  subMonths,
-  format,
-  eachDayOfInterval,
-  getISOWeek,
-} from 'date-fns';
 import { useSessions } from '@/hooks/useSessions';
 import { useProjects } from '@/hooks/useProjects';
-import { useTasks } from '@/hooks/useTasks';
-import { PeriodHeader, type Granularity } from '@/components/stats/PeriodHeader';
+import { useSettings } from '@/hooks/useSettings';
+import { usePageTitle } from '@/hooks/usePageTitle';
+import { usePeriod, type Granularity } from '@/lib/period';
+import { PeriodHeader } from '@/components/stats/PeriodHeader';
+import { KpiCard, DeltaBadge } from '@/components/stats/StatCard';
 import { FocusTimeChart } from '@/components/stats/FocusTimeChart';
 import { SessionsChart } from '@/components/stats/SessionsChart';
 import { FocusVsBreakDonut } from '@/components/stats/FocusVsBreakDonut';
 import { FocusDistribution } from '@/components/stats/FocusDistribution';
 import { TrendChart } from '@/components/stats/TrendChart';
+import { ChartSkeleton, StatCardSkeleton } from '@/components/ui/Skeleton';
 import {
   computePeriodStats,
-  groupSessionsByDay,
   computeCurrentWeekFocusSeconds,
+  dailyFocusSeries,
   deltaPercent,
+  isFocus,
+  projectDistribution,
 } from '@/lib/stats';
-import { formatDuration } from '@/lib/time';
-import { useSettings } from '@/hooks/useSettings';
-import { EmptyStateNotice } from '@/components/stats/EmptyStateNotice';
+import { formatDateKey, formatDuration } from '@/lib/time';
+import type { Session } from '@/types';
+
+const COMPARED_TO: Record<Granularity, [string, string]> = {
+  day: ['yesterday at this time', 'the day before'],
+  week: ['this point last week', 'the previous week'],
+  month: ['this point last month', 'the previous month'],
+};
+
+interface Bucket {
+  day: string;
+  focusSeconds: number | null;
+  started: number | null;
+  completed: number | null;
+  /** Start of the bucket; buckets in the future are blanked out. */
+  at: number;
+}
+
+/** Chart buckets: hours for a day, days for a week or month. */
+function buildBuckets(sessions: Session[], g: Granularity, start: Date, end: Date): Bucket[] {
+  const inRange = sessions.filter(
+    (s) => isFocus(s) && s.started_at >= start.getTime() && s.started_at <= end.getTime()
+  );
+  if (g === 'day') {
+    const buckets: Bucket[] = Array.from({ length: 24 }, (_, h) => ({
+      day: new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' }),
+      focusSeconds: 0,
+      started: 0,
+      completed: 0,
+      at: new Date(start.getFullYear(), start.getMonth(), start.getDate(), h).getTime(),
+    }));
+    for (const s of inRange) {
+      const b = buckets[new Date(s.started_at).getHours()];
+      b.focusSeconds! += s.duration_seconds;
+      b.started!++;
+      if (s.completed) b.completed!++;
+    }
+    return blankFuture(buckets);
+  }
+  const buckets = new Map<string, Bucket>();
+  for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    buckets.set(formatDateKey(d), {
+      day:
+        g === 'week' ? d.toLocaleDateString(undefined, { weekday: 'short' }) : String(d.getDate()),
+      focusSeconds: 0,
+      started: 0,
+      completed: 0,
+      at: new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(),
+    });
+  }
+  for (const s of inRange) {
+    const b = buckets.get(formatDateKey(new Date(s.started_at)));
+    if (!b) continue;
+    b.focusSeconds! += s.duration_seconds;
+    b.started!++;
+    if (s.completed) b.completed!++;
+  }
+  return blankFuture([...buckets.values()]);
+}
+
+/** Days/hours that haven't happened yet have no value (a gap), not zero. */
+function blankFuture(buckets: Bucket[]): Bucket[] {
+  const now = Date.now();
+  return buckets.map((b) =>
+    b.at > now ? { ...b, focusSeconds: null, started: null, completed: null } : b
+  );
+}
 
 export function StatisticsPage() {
-  const [granularity, setGranularity] = useState<Granularity>('week');
-  const [currentDate, setCurrentDate] = useState(new Date());
+  usePageTitle('Statistics');
+  const nav = usePeriod('week');
+  const { granularity, period, previous, isCurrent } = nav;
 
-  const { sessions } = useSessions();
-  const { activeProjects } = useProjects();
-  const { tasks } = useTasks();
+  const { sessions, loading } = useSessions();
+  const { projects } = useProjects();
   const { settings } = useSettings();
 
-  const period = useMemo(() => {
-    switch (granularity) {
-      case 'day':
-        return { start: startOfDay(currentDate), end: endOfDay(currentDate) };
-      case 'week':
-        return {
-          start: startOfWeek(currentDate, { weekStartsOn: 1 }),
-          end: endOfWeek(currentDate, { weekStartsOn: 1 }),
-        };
-      case 'month':
-        return { start: startOfMonth(currentDate), end: endOfMonth(currentDate) };
-    }
-  }, [granularity, currentDate]);
+  const stats = useMemo(
+    () => computePeriodStats(sessions, period.start, period.end),
+    [sessions, period]
+  );
+  const prevStats = useMemo(
+    () => computePeriodStats(sessions, previous.start, previous.end),
+    [sessions, previous]
+  );
+  const comparedTo = COMPARED_TO[granularity][isCurrent ? 0 : 1];
 
-  // Charts show the week when day granularity is selected (so there's actual data to see)
-  const chartPeriod = useMemo(() => {
-    if (granularity !== 'day') return period;
-    return {
-      start: startOfWeek(currentDate, { weekStartsOn: 1 }),
-      end: endOfWeek(currentDate, { weekStartsOn: 1 }),
-    };
-  }, [granularity, period, currentDate]);
+  const buckets = useMemo(
+    () => buildBuckets(sessions, granularity, period.start, period.end),
+    [sessions, granularity, period]
+  );
+  const highlight = useMemo(() => {
+    if (!isCurrent) return undefined;
+    const now = new Date();
+    if (granularity === 'day') return now.toLocaleTimeString(undefined, { hour: 'numeric' });
+    if (granularity === 'week') return now.toLocaleDateString(undefined, { weekday: 'short' });
+    return String(now.getDate());
+  }, [isCurrent, granularity]);
 
-  const highlightDayLabel = format(new Date(), 'EEE');
+  const distribution = useMemo(
+    () => projectDistribution(sessions, projects, period.start, period.end),
+    [sessions, projects, period]
+  );
+  const top2Share = distribution.items.slice(0, 2).reduce((sum, i) => sum + i.pct, 0);
 
-  const periodLabel = useMemo(() => {
-    switch (granularity) {
-      case 'day':
-        return format(currentDate, 'dd.MM.yyyy');
-      case 'week':
-        return `${format(period.start, 'dd.MM')} – ${format(period.end, 'dd.MM.yyyy')}`;
-      case 'month':
-        return format(currentDate, 'MMMM yyyy');
-    }
-  }, [granularity, currentDate, period]);
+  const weekFocus = useMemo(() => computeCurrentWeekFocusSeconds(sessions), [sessions]);
+  const goalHours = settings.weekly_goal_hours;
+  const goalPct =
+    goalHours > 0 ? Math.min(Math.round((weekFocus / 3600 / goalHours) * 100), 100) : 0;
 
-  const stats = useMemo(() => {
-    return computePeriodStats(sessions, period.start, period.end);
-  }, [sessions, period]);
+  const trendData = useMemo(
+    () =>
+      dailyFocusSeries(sessions, 30).map((d) => ({
+        day: d.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        focusSeconds: d.focusSeconds,
+      })),
+    [sessions]
+  );
 
-  // Previous period for delta comparison
-  const prevPeriod = useMemo(() => {
-    switch (granularity) {
-      case 'day':
-        return {
-          start: startOfDay(subDays(currentDate, 1)),
-          end: endOfDay(subDays(currentDate, 1)),
-        };
-      case 'week': {
-        const prevWeek = subWeeks(currentDate, 1);
-        return {
-          start: startOfWeek(prevWeek, { weekStartsOn: 1 }),
-          end: endOfWeek(prevWeek, { weekStartsOn: 1 }),
-        };
-      }
-      case 'month': {
-        const prevMonth = subMonths(currentDate, 1);
-        return {
-          start: startOfMonth(prevMonth),
-          end: endOfMonth(prevMonth),
-        };
-      }
-    }
-  }, [granularity, currentDate]);
+  const completionRate =
+    stats.sessions_started > 0
+      ? Math.round((stats.sessions_completed / stats.sessions_started) * 100)
+      : null;
+  const avgSession =
+    stats.sessions_started > 0 ? Math.round(stats.focus_seconds / stats.sessions_started) : 0;
 
-  const prevStats = useMemo(() => {
-    return computePeriodStats(sessions, prevPeriod.start, prevPeriod.end);
-  }, [sessions, prevPeriod]);
-
-  const focusDelta = useMemo(() => {
-    return deltaPercent(stats.focus_seconds, prevStats.focus_seconds);
-  }, [stats, prevStats]);
-
-  const sessionsDelta = useMemo(() => {
-    return deltaPercent(stats.sessions_completed, prevStats.sessions_completed);
-  }, [stats, prevStats]);
-
-  const handlePrev = useCallback(() => {
-    switch (granularity) {
-      case 'day':
-        setCurrentDate((d) => subDays(d, 1));
-        break;
-      case 'week':
-        setCurrentDate((d) => subWeeks(d, 1));
-        break;
-      case 'month':
-        setCurrentDate((d) => subMonths(d, 1));
-        break;
-    }
-  }, [granularity]);
-
-  const handleNext = useCallback(() => {
-    switch (granularity) {
-      case 'day':
-        setCurrentDate((d) => addDays(d, 1));
-        break;
-      case 'week':
-        setCurrentDate((d) => addWeeks(d, 1));
-        break;
-      case 'month':
-        setCurrentDate((d) => addMonths(d, 1));
-        break;
-    }
-  }, [granularity]);
-
-  const handleToday = useCallback(() => setCurrentDate(new Date()), []);
-
-  // Chart data preparation
-  const sessionsByDay = useMemo(() => groupSessionsByDay(sessions), [sessions]);
-
-  const focusTimeData = useMemo(() => {
-    if (granularity === 'month') {
-      const weeks = new Map<number, number>();
-      const days = eachDayOfInterval({ start: chartPeriod.start, end: chartPeriod.end });
-      for (const d of days) {
-        const key = format(d, 'yyyy-MM-dd');
-        const daySessions = sessionsByDay.get(key) ?? [];
-        const focusSeconds = daySessions
-          .filter((s) => s.type === 'focus')
-          .reduce((sum, s) => sum + s.duration_seconds, 0);
-        const weekNum = getISOWeek(d);
-        weeks.set(weekNum, (weeks.get(weekNum) ?? 0) + focusSeconds);
-      }
-      return Array.from(weeks.entries()).map(([week, focusSeconds]) => ({
-        day: `W${week}`,
-        focusSeconds,
-      }));
-    }
-
-    const chartDays = eachDayOfInterval({ start: chartPeriod.start, end: chartPeriod.end }).map(
-      (d) => ({
-        label: format(d, 'EEE'),
-        key: format(d, 'yyyy-MM-dd'),
-      })
+  if (loading) {
+    return (
+      <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:p-12">
+        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <StatCardSkeleton key={i} />
+          ))}
+        </div>
+        <ChartSkeleton />
+      </div>
     );
+  }
 
-    return chartDays.map((day) => {
-      const daySessions = sessionsByDay.get(day.key) ?? [];
-      const focusSeconds = daySessions
-        .filter((s) => s.type === 'focus')
-        .reduce((sum, s) => sum + s.duration_seconds, 0);
-      return { day: day.label, focusSeconds };
-    });
-  }, [granularity, chartPeriod, sessionsByDay]);
-
-  const sessionsData = useMemo(() => {
-    if (granularity === 'month') {
-      const weeks = new Map<number, { started: number; completed: number }>();
-      const days = eachDayOfInterval({ start: chartPeriod.start, end: chartPeriod.end });
-      for (const d of days) {
-        const key = format(d, 'yyyy-MM-dd');
-        const daySessions = sessionsByDay.get(key) ?? [];
-        const weekNum = getISOWeek(d);
-        const existing = weeks.get(weekNum) ?? { started: 0, completed: 0 };
-        existing.started += daySessions.length;
-        existing.completed += daySessions.filter((s) => s.completed).length;
-        weeks.set(weekNum, existing);
-      }
-      return Array.from(weeks.entries()).map(([week, vals]) => ({
-        day: `W${week}`,
-        started: vals.started,
-        completed: vals.completed,
-      }));
-    }
-
-    const chartDays = eachDayOfInterval({ start: chartPeriod.start, end: chartPeriod.end }).map(
-      (d) => ({
-        label: format(d, 'EEE'),
-        key: format(d, 'yyyy-MM-dd'),
-      })
+  if (sessions.length === 0) {
+    return (
+      <div className="mx-auto flex max-w-lg flex-col items-center px-4 py-16 text-center">
+        <h1 className="sr-only">Statistics</h1>
+        <BarChart3 className="mb-4 h-12 w-12 text-text-muted" aria-hidden="true" />
+        <p className="mb-1 text-lg font-medium text-text-base">Your statistics will appear here</p>
+        <p className="mb-5 text-sm text-text-sub">
+          Finish a focus session and you’ll see where your time goes — by day, project and week.
+        </p>
+        <Link to="/timer" className="btn-primary">
+          Start a focus session
+        </Link>
+      </div>
     );
-
-    return chartDays.map((day) => {
-      const daySessions = sessionsByDay.get(day.key) ?? [];
-      return {
-        day: day.label,
-        started: daySessions.length,
-        completed: daySessions.filter((s) => s.completed).length,
-      };
-    });
-  }, [granularity, chartPeriod, sessionsByDay]);
-
-  // Filtered to selected period
-  const periodStartMs = period.start.getTime();
-  const periodEndMs = period.end.getTime();
-
-  const { focusSeconds, breakSeconds } = useMemo(() => {
-    const inRange = sessions.filter(
-      (s) => s.started_at >= periodStartMs && s.started_at <= periodEndMs
-    );
-    const focus = inRange
-      .filter((s) => s.type === 'focus')
-      .reduce((sum, s) => sum + s.duration_seconds, 0);
-    const breaks = inRange
-      .filter((s) => s.type !== 'focus' && s.completed)
-      .reduce((sum, s) => sum + s.duration_seconds, 0);
-    return { focusSeconds: focus, breakSeconds: breaks };
-  }, [sessions, periodStartMs, periodEndMs]);
-
-  // Tasks completed in period
-  const completedTasksCount = useMemo(() => {
-    return tasks.filter((t) => t.is_completed).length;
-  }, [tasks]);
-
-  // Focus distribution (Insights format)
-  const focusDistribution = useMemo(() => {
-    const map = new Map<string, { name: string; color: string; seconds: number }>();
-    let total = 0;
-    for (const s of sessions) {
-      if (s.type !== 'focus' || !s.project_id) continue;
-      if (s.started_at < periodStartMs || s.started_at > periodEndMs) continue;
-      const p = activeProjects.find((ap) => ap.id === s.project_id);
-      if (!p) continue;
-      total += s.duration_seconds;
-      const existing = map.get(s.project_id);
-      if (existing) {
-        existing.seconds += s.duration_seconds;
-      } else {
-        map.set(s.project_id, { name: p.name, color: p.color, seconds: s.duration_seconds });
-      }
-    }
-    const items = Array.from(map.values())
-      .map((item) => ({ ...item, pct: total > 0 ? Math.round((item.seconds / total) * 100) : 0 }))
-      .sort((a, b) => b.seconds - a.seconds);
-    return { items, total };
-  }, [sessions, activeProjects, periodStartMs, periodEndMs]);
-
-  const top2Share = useMemo(() => {
-    if (focusDistribution.items.length === 0) return 0;
-    return focusDistribution.items.slice(0, 2).reduce((sum, item) => sum + item.pct, 0);
-  }, [focusDistribution]);
-
-  // 30-day trend data (always last 30 days regardless of selected period)
-  const trendData = useMemo(() => {
-    const byDay = groupSessionsByDay(sessions);
-    const today = new Date();
-    const result: { day: string; focusSeconds: number }[] = [];
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      const key = format(d, 'yyyy-MM-dd');
-      const daySessions = byDay.get(key) ?? [];
-      const focusSeconds = daySessions
-        .filter((s) => s.type === 'focus')
-        .reduce((sum, s) => sum + s.duration_seconds, 0);
-      result.push({
-        day: format(d, 'MMM d'),
-        focusSeconds,
-      });
-    }
-    return result;
-  }, [sessions]);
-
-  const hasData = sessions.length > 0;
-
-  const deltaBadgeClass = (value: number) => {
-    if (value > 0) return 'text-[var(--color-success)]';
-    if (value < 0) return 'text-[var(--color-error)]';
-    return 'text-text-sub';
-  };
-
-  const deltaBadgeBg = (value: number) => {
-    if (value > 0) return 'color-mix(in srgb, var(--color-success) 10%, transparent)';
-    if (value < 0) return 'color-mix(in srgb, var(--color-error) 10%, transparent)';
-    return 'var(--bg-secondary)';
-  };
+  }
 
   return (
-    <div className="p-6 lg:p-12 w-full 2xl:max-w-[1600px] 2xl:mx-auto animate-[page-enter_200ms_ease]">
+    <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:p-12">
+      <h1 className="mb-4 text-2xl font-semibold text-text-base">Statistics</h1>
       <PeriodHeader
-        label={periodLabel}
-        onPrev={handlePrev}
-        onNext={handleNext}
-        onToday={handleToday}
+        label={nav.label}
+        onPrev={nav.prev}
+        onNext={nav.next}
+        onToday={nav.today}
+        isCurrent={isCurrent}
         granularity={granularity}
-        onGranularityChange={(g) => {
-          setGranularity(g);
-          setCurrentDate(new Date());
-        }}
+        onGranularityChange={nav.setGranularity}
       />
 
-      {settings.weekly_goal_hours > 0 && (
-        <div className="bg-bg-card border border-border-base rounded-lg p-4 mb-6 flex items-center gap-4">
-          <div className="w-10 h-10 rounded-full bg-brand-alpha flex items-center justify-center shrink-0">
-            <Target className="w-5 h-5 text-brand" />
+      {goalHours > 0 && (
+        <div className="mb-6 flex items-center gap-4 rounded-lg border border-border-base bg-bg-card p-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-alpha">
+            <Target className="h-5 w-5 text-brand-text" aria-hidden="true" />
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-sm font-medium text-text-base">Weekly Goal</span>
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="text-sm font-medium text-text-base">This week’s goal</span>
               <span className="text-xs text-text-sub">
-                {formatDuration(computeCurrentWeekFocusSeconds(sessions))} /{' '}
-                {settings.weekly_goal_hours}h
+                {formatDuration(weekFocus)} of {goalHours}h · {goalPct}%
               </span>
             </div>
-            <div className="h-2 bg-bg-tertiary rounded-full overflow-hidden">
+            <div
+              className="h-2 overflow-hidden rounded-full bg-bg-tertiary"
+              role="progressbar"
+              aria-label="Weekly goal progress"
+              aria-valuenow={goalPct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
               <div
-                className="h-full bg-brand rounded-full transition-all duration-slow"
-                style={{
-                  width: `${Math.min(
-                    (computeCurrentWeekFocusSeconds(sessions) / 3600 / settings.weekly_goal_hours) *
-                      100,
-                    100
-                  )}%`,
-                }}
+                className="h-full rounded-full bg-brand transition-all duration-slow"
+                style={{ width: `${goalPct}%` }}
               />
             </div>
           </div>
         </div>
       )}
 
-      {!hasData && (
-        <EmptyStateNotice
-          icon={BarChart3}
-          title="No sessions yet"
-          subtitle="Complete a focus session to see your statistics — here's a preview of what you'll see"
-        />
-      )}
-
-      <div className={!hasData ? 'opacity-50 pointer-events-none select-none' : undefined}>
-        <>
-          {/* KPI Cards — styled like Insights */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-            <div className="bg-bg-card border border-border-base rounded-lg p-5 flex flex-col gap-3">
-              <div className="text-[13px] text-text-sub font-bold tracking-wide">Focus time</div>
-              <div className="text-[34px] font-display font-extrabold leading-none text-text-base">
-                {formatDuration(stats.focus_seconds)}
-              </div>
-              <div
-                className="inline-flex items-center gap-2 w-fit max-w-full px-2.5 py-1.5 rounded-lg text-[12px] leading-snug font-bold"
-                style={{ backgroundColor: deltaBadgeBg(focusDelta) }}
-              >
-                <span className={deltaBadgeClass(focusDelta)}>
-                  {focusDelta > 0 ? '+' : ''}
-                  {focusDelta}% vs last {granularity}
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-bg-card border border-border-base rounded-lg p-5 flex flex-col gap-3">
-              <div className="text-[13px] text-text-sub font-bold tracking-wide">Total time</div>
-              <div className="text-[34px] font-display font-extrabold leading-none text-text-base">
-                {formatDuration(stats.total_seconds)}
-              </div>
-              <div className="inline-flex items-center gap-2 w-fit max-w-full px-2.5 py-1.5 rounded-lg bg-bg-secondary text-text-sub text-[12px] leading-snug font-bold">
-                Including breaks
-              </div>
-            </div>
-
-            <div className="bg-bg-card border border-border-base rounded-lg p-5 flex flex-col gap-3">
-              <div className="text-[13px] text-text-sub font-bold tracking-wide">Procedures</div>
-              <div className="text-[34px] font-display font-extrabold leading-none text-text-base">
-                {stats.sessions_started}
-              </div>
-              <div
-                className="inline-flex items-center gap-2 w-fit max-w-full px-2.5 py-1.5 rounded-lg text-[12px] leading-snug font-bold"
-                style={{ backgroundColor: deltaBadgeBg(sessionsDelta) }}
-              >
-                <span className={deltaBadgeClass(sessionsDelta)}>
-                  {sessionsDelta > 0 ? '+' : ''}
-                  {sessionsDelta}% completed vs last {granularity}
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-bg-card border border-border-base rounded-lg p-5 flex flex-col gap-3">
-              <div className="text-[13px] text-text-sub font-bold tracking-wide">
-                Finished Flows
-              </div>
-              <div className="text-[34px] font-display font-extrabold leading-none text-text-base">
-                {stats.sessions_completed}
-              </div>
-              <div className="inline-flex items-center gap-2 w-fit max-w-full px-2.5 py-1.5 rounded-lg bg-bg-secondary text-text-sub text-[12px] leading-snug font-bold">
-                Fully completed sessions
-              </div>
-            </div>
-
-            <div className="bg-bg-card border border-border-base rounded-lg p-5 flex flex-col gap-3">
-              <div className="text-[13px] text-text-sub font-bold tracking-wide">Tasks Done</div>
-              <div className="text-[34px] font-display font-extrabold leading-none text-text-base">
-                {completedTasksCount}
-              </div>
-              <div className="inline-flex items-center gap-2 w-fit max-w-full px-2.5 py-1.5 rounded-lg bg-bg-secondary text-text-sub text-[12px] leading-snug font-bold">
-                Completed tasks
-              </div>
-            </div>
-          </div>
-
-          {/* Charts — aligned 2x2 grid, left charts ~65% */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1.85fr_1fr] gap-4 mb-4 items-stretch">
-            <FocusTimeChart data={focusTimeData} highlightDay={highlightDayLabel} />
-            <FocusVsBreakDonut focusSeconds={focusSeconds} breakSeconds={breakSeconds} />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-[1.85fr_1fr] gap-4 mb-4 items-stretch">
-            <SessionsChart data={sessionsData} highlightDay={highlightDayLabel} />
-            <FocusDistribution
-              items={focusDistribution.items}
-              topNShare={top2Share}
-              weeklyTargetPct={
-                settings.weekly_goal_hours > 0
-                  ? Math.min(
-                      Math.round(
-                        (computeCurrentWeekFocusSeconds(sessions) /
-                          3600 /
-                          settings.weekly_goal_hours) *
-                          100
-                      ),
-                      100
-                    )
-                  : undefined
-              }
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <KpiCard
+          label="Focus time"
+          value={formatDuration(stats.focus_seconds)}
+          footnote={
+            <DeltaBadge
+              delta={deltaPercent(stats.focus_seconds, prevStats.focus_seconds)}
+              comparedTo={comparedTo}
             />
-          </div>
-
-          {/* 30-day trend */}
-          <TrendChart data={trendData} />
-        </>
+          }
+        />
+        <KpiCard
+          label="Focus sessions"
+          value={String(stats.sessions_started)}
+          footnote={
+            <DeltaBadge
+              delta={deltaPercent(stats.sessions_started, prevStats.sessions_started)}
+              comparedTo={comparedTo}
+            />
+          }
+        />
+        <KpiCard
+          label="Finished"
+          value={completionRate === null ? '—' : `${completionRate}%`}
+          footnote={
+            <span className="text-text-sub">
+              {stats.sessions_completed} of {stats.sessions_started} ran to the end
+            </span>
+          }
+        />
+        <KpiCard
+          label="Average session"
+          value={avgSession > 0 ? formatDuration(avgSession) : '—'}
+          footnote={
+            <span className="text-text-sub">{formatDuration(stats.break_seconds)} on breaks</span>
+          }
+        />
       </div>
+
+      <div className="mb-4 grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[1.85fr_1fr]">
+        <FocusTimeChart
+          data={buckets}
+          highlightDay={highlight}
+          subtitle={granularity === 'day' ? 'Focus time by hour started' : 'Focus time per day'}
+        />
+        <FocusVsBreakDonut focusSeconds={stats.focus_seconds} breakSeconds={stats.break_seconds} />
+      </div>
+
+      <div className="mb-4 grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[1.85fr_1fr]">
+        <SessionsChart
+          data={buckets}
+          highlightDay={highlight}
+          subtitle={
+            granularity === 'day' ? 'Started vs finished, by hour' : 'Started vs finished, per day'
+          }
+        />
+        <FocusDistribution items={distribution.items} topNShare={top2Share} />
+      </div>
+
+      <TrendChart data={trendData} />
     </div>
   );
 }

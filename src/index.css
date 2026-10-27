@@ -220,6 +220,9 @@ html.modal-open .app-scroll {
 /* Route transitions are intentionally short and quiet so motion supports focus. */
 .page {
   min-height: 100%;
+  /* Flex column so a page's root can grow to fill the viewport (flex-1). */
+  display: flex;
+  flex-direction: column;
   animation: page-fade 220ms ease both;
 }
 

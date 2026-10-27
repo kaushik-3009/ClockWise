@@ -1,464 +1,258 @@
-import { useMemo, useState, useCallback } from 'react';
-import { Brain, Calendar, Target } from 'lucide-react';
-import { TrendChart } from '@/components/stats/TrendChart';
+import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { Brain, Calendar, Lightbulb, Target } from 'lucide-react';
 import { WeekdayChart } from '@/components/stats/WeekdayChart';
-import { FocusDistribution } from '@/components/stats/FocusDistribution';
-import {
-  startOfWeek,
-  endOfWeek,
-  startOfDay,
-  endOfDay,
-  startOfMonth,
-  endOfMonth,
-  addWeeks,
-  subWeeks,
-  addDays,
-  subDays,
-  addMonths,
-  subMonths,
-  format,
-} from 'date-fns';
+import { PeriodHeader } from '@/components/stats/PeriodHeader';
+import { KpiCard, DeltaBadge } from '@/components/stats/StatCard';
+import { ChartSkeleton } from '@/components/ui/Skeleton';
 import { useSessions } from '@/hooks/useSessions';
 import { useProjects } from '@/hooks/useProjects';
-import { useSettings } from '@/hooks/useSettings';
-import { PeriodHeader, type Granularity } from '@/components/stats/PeriodHeader';
-import { formatDuration, formatDateKey } from '@/lib/time';
-import { PROJECT_COLORS } from '@/lib/constants';
-import { EmptyStateNotice } from '@/components/stats/EmptyStateNotice';
+import { usePageTitle } from '@/hooks/usePageTitle';
+import { usePeriod } from '@/lib/period';
+import { formatDuration } from '@/lib/time';
 import {
-  groupSessionsByDay,
-  computeCurrentWeekFocusSeconds,
-  computePeriodStats,
   computeBestDay,
+  computeBestMonth,
   computeConsistency,
-  computeTopNShare,
-  computePeriodDelta,
+  computePeriodStats,
+  deltaPercent,
+  isFocus,
+  projectDistribution,
 } from '@/lib/stats';
 
+const DAYPARTS = [
+  { id: 'morning', label: 'Morning', range: '5am–12pm', from: 5, to: 12 },
+  { id: 'afternoon', label: 'Afternoon', range: '12–5pm', from: 12, to: 17 },
+  { id: 'evening', label: 'Evening', range: '5–10pm', from: 17, to: 22 },
+  { id: 'night', label: 'Night', range: '10pm–5am', from: 22, to: 29 },
+] as const;
+
+function daypartOf(hour: number) {
+  const h = hour < 5 ? hour + 24 : hour;
+  return DAYPARTS.find((d) => h >= d.from && h < d.to) ?? DAYPARTS[3];
+}
+
+function Recommendation({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: typeof Brain;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-border-base bg-bg-card p-5">
+      <div className="mb-2 flex items-center gap-2">
+        <Icon className="h-5 w-5 text-brand-text" aria-hidden="true" />
+        <h3 className="text-sm font-semibold text-text-base">{title}</h3>
+      </div>
+      <p className="text-sm text-text-sub">{children}</p>
+    </div>
+  );
+}
+
 export function InsightsPage() {
-  const [granularity, setGranularity] = useState<Granularity>('week');
-  const [currentDate, setCurrentDate] = useState(new Date());
+  usePageTitle('Insights');
+  const nav = usePeriod('month');
+  const { period, previous, isCurrent, granularity } = nav;
+  const { sessions, loading } = useSessions();
+  const { projects } = useProjects();
 
-  const { sessions } = useSessions();
-  const { activeProjects } = useProjects();
-  const { settings } = useSettings();
+  const periodFocus = useMemo(
+    () =>
+      sessions.filter(
+        (s) =>
+          isFocus(s) &&
+          s.started_at >= period.start.getTime() &&
+          s.started_at <= period.end.getTime()
+      ),
+    [sessions, period]
+  );
 
-  const period = useMemo(() => {
-    switch (granularity) {
-      case 'day':
-        return { start: startOfDay(currentDate), end: endOfDay(currentDate) };
-      case 'week':
-        return {
-          start: startOfWeek(currentDate, { weekStartsOn: 1 }),
-          end: endOfWeek(currentDate, { weekStartsOn: 1 }),
-        };
-      case 'month':
-        return { start: startOfMonth(currentDate), end: endOfMonth(currentDate) };
-    }
-  }, [granularity, currentDate]);
-
-  const periodLabel = useMemo(() => {
-    switch (granularity) {
-      case 'day':
-        return format(currentDate, 'dd.MM.yyyy');
-      case 'week':
-        return `${format(period.start, 'dd.MM')} – ${format(period.end, 'dd.MM.yyyy')}`;
-      case 'month':
-        return format(currentDate, 'MMMM yyyy');
-    }
-  }, [granularity, currentDate, period]);
-
-  const handlePrev = useCallback(() => {
-    switch (granularity) {
-      case 'day':
-        setCurrentDate((d) => subDays(d, 1));
-        break;
-      case 'week':
-        setCurrentDate((d) => subWeeks(d, 1));
-        break;
-      case 'month':
-        setCurrentDate((d) => subMonths(d, 1));
-        break;
-    }
-  }, [granularity]);
-
-  const handleNext = useCallback(() => {
-    switch (granularity) {
-      case 'day':
-        setCurrentDate((d) => addDays(d, 1));
-        break;
-      case 'week':
-        setCurrentDate((d) => addWeeks(d, 1));
-        break;
-      case 'month':
-        setCurrentDate((d) => addMonths(d, 1));
-        break;
-    }
-  }, [granularity]);
-
-  const handleToday = useCallback(() => setCurrentDate(new Date()), []);
-
-  const periodStats = useMemo(() => {
-    return computePeriodStats(sessions, period.start, period.end);
-  }, [sessions, period]);
-
-  const periodSessions = useMemo(() => {
-    const startMs = period.start.getTime();
-    const endMs = period.end.getTime();
-    return sessions.filter((s) => s.started_at >= startMs && s.started_at <= endMs);
-  }, [sessions, period]);
-
-  const daytimeStats = useMemo(() => {
-    const stats = { morning: 0, noon: 0, evening: 0 };
-    const sessionsCount = { morning: 0, noon: 0, evening: 0 };
-
-    for (const s of periodSessions) {
-      if (s.type !== 'focus') continue;
-      const hour = new Date(s.started_at).getHours();
-      if (hour >= 4 && hour < 11) {
-        stats.morning += s.duration_seconds;
-        sessionsCount.morning++;
-      } else if (hour >= 11 && hour < 17) {
-        stats.noon += s.duration_seconds;
-        sessionsCount.noon++;
-      } else {
-        stats.evening += s.duration_seconds;
-        sessionsCount.evening++;
-      }
-    }
-
-    return { stats, sessionsCount };
-  }, [periodSessions]);
+  const stats = useMemo(
+    () => computePeriodStats(sessions, period.start, period.end),
+    [sessions, period]
+  );
+  const prevStats = useMemo(
+    () => computePeriodStats(sessions, previous.start, previous.end),
+    [sessions, previous]
+  );
+  const consistency = useMemo(
+    () => computeConsistency(sessions, period.start, period.end),
+    [sessions, period]
+  );
+  const bestDay = useMemo(
+    () => computeBestDay(sessions, period.start, period.end),
+    [sessions, period]
+  );
+  const bestMonth = useMemo(() => computeBestMonth(sessions), [sessions]);
+  const topProject = useMemo(
+    () => projectDistribution(sessions, projects, period.start, period.end).items[0],
+    [sessions, projects, period]
+  );
 
   const weekdayStats = useMemo(() => {
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const stats = days.map(() => 0);
-    for (const s of periodSessions) {
-      if (s.type !== 'focus') continue;
-      const day = new Date(s.started_at).getDay();
-      stats[day] += s.duration_seconds;
+    const names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const totals = names.map(() => 0);
+    for (const s of periodFocus) totals[new Date(s.started_at).getDay()] += s.duration_seconds;
+    return names.map((name, i) => ({ name, seconds: totals[i] }));
+  }, [periodFocus]);
+
+  const dayparts = useMemo(() => {
+    const totals = new Map<string, number>(DAYPARTS.map((d) => [d.id, 0]));
+    for (const s of periodFocus) {
+      const part = daypartOf(new Date(s.started_at).getHours());
+      totals.set(part.id, (totals.get(part.id) ?? 0) + s.duration_seconds);
     }
-    return days.map((name, i) => ({ name, seconds: stats[i] }));
-  }, [periodSessions]);
+    const max = Math.max(...totals.values(), 1);
+    return DAYPARTS.map((d) => ({
+      ...d,
+      seconds: totals.get(d.id) ?? 0,
+      pct: ((totals.get(d.id) ?? 0) / max) * 100,
+    }));
+  }, [periodFocus]);
+  const bestDaypart = [...dayparts].sort((a, b) => b.seconds - a.seconds)[0];
 
-  const bestDay = useMemo(() => {
-    return computeBestDay(sessions, period.start, period.end);
-  }, [sessions, period]);
+  const longest = useMemo(
+    () => periodFocus.reduce((max, s) => Math.max(max, s.duration_seconds), 0),
+    [periodFocus]
+  );
 
-  const consistency = useMemo(() => {
-    return computeConsistency(sessions, period.start, period.end);
-  }, [sessions, period]);
+  const comparedTo = isCurrent ? `this point last ${granularity}` : `the previous ${granularity}`;
 
-  const delta = useMemo(() => {
-    return computePeriodDelta(sessions, period.start, period.end);
-  }, [sessions, period]);
-
-  const topProject = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const s of periodSessions) {
-      if (s.project_id && s.type === 'focus') {
-        map.set(s.project_id, (map.get(s.project_id) ?? 0) + s.duration_seconds);
-      }
-    }
-    let maxId = '';
-    let maxSeconds = 0;
-    for (const [id, seconds] of map) {
-      if (seconds > maxSeconds) {
-        maxSeconds = seconds;
-        maxId = id;
-      }
-    }
-    return activeProjects.find((p) => p.id === maxId);
-  }, [periodSessions, activeProjects]);
-
-  const consistencyScore = useMemo(() => {
-    const byDay = groupSessionsByDay(periodSessions);
-    if (byDay.size === 0) return 0;
-    const totalDays = Math.max(byDay.size, 1);
-    const activeDays = Array.from(byDay.values()).filter((daySessions) =>
-      daySessions.some((s) => s.type === 'focus')
-    ).length;
-    return Math.round((activeDays / totalDays) * 100);
-  }, [periodSessions]);
-
-  const focusDistribution = useMemo(() => {
-    const map = new Map<string, { name: string; color: string; seconds: number }>();
-    let total = 0;
-    for (const s of periodSessions) {
-      if (s.type !== 'focus' || !s.project_id) continue;
-      const p = activeProjects.find((ap) => ap.id === s.project_id);
-      if (!p) continue;
-      total += s.duration_seconds;
-      const existing = map.get(s.project_id);
-      if (existing) {
-        existing.seconds += s.duration_seconds;
-      } else {
-        map.set(s.project_id, { name: p.name, color: p.color, seconds: s.duration_seconds });
-      }
-    }
-    const items = Array.from(map.values())
-      .map((item) => ({ ...item, pct: total > 0 ? Math.round((item.seconds / total) * 100) : 0 }))
-      .sort((a, b) => b.seconds - a.seconds);
-    return { items, total };
-  }, [periodSessions, activeProjects]);
-
-  const top2Share = useMemo(() => {
-    return computeTopNShare(focusDistribution.items, 2);
-  }, [focusDistribution]);
-
-  const weeklyTargetPct = useMemo(() => {
-    if (settings.weekly_goal_hours <= 0) return undefined;
-    const current = computeCurrentWeekFocusSeconds(sessions);
-    return Math.min(Math.round((current / 3600 / settings.weekly_goal_hours) * 100), 100);
-  }, [sessions, settings.weekly_goal_hours]);
-
-  // 30-day trend (always last 30 days, not filtered by period)
-  const trendData = useMemo(() => {
-    const byDay = groupSessionsByDay(sessions);
-    const today = new Date();
-    const result: { day: string; focusSeconds: number }[] = [];
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      const key = formatDateKey(d);
-      const daySessions = byDay.get(key) ?? [];
-      const focusSeconds = daySessions
-        .filter((s) => s.type === 'focus')
-        .reduce((sum, s) => sum + s.duration_seconds, 0);
-      result.push({
-        day: d.toLocaleDateString('en-US', { weekday: 'narrow' }),
-        focusSeconds,
-      });
-    }
-    return result;
-  }, [sessions]);
-
-  // Insight text for weekday chart
-  const weekdayInsight = useMemo(() => {
-    if (weekdayStats.every((d) => d.seconds === 0)) return undefined;
-    const short = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const best = weekdayStats.reduce(
-      (m, d, i) => (d.seconds > m.seconds ? { idx: i, seconds: d.seconds } : m),
-      { idx: 0, seconds: 0 }
+  if (loading) {
+    return (
+      <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:p-12">
+        <ChartSkeleton />
+      </div>
     );
-    const active = weekdayStats.filter((d) => d.seconds > 0).length;
-    return `Most of your focus happens across ${active} days, with ${short[best.idx]} as the strongest day.`;
-  }, [weekdayStats]);
+  }
 
-  const hasData = sessions.length > 0;
-  const hasPeriodData = periodSessions.length > 0;
+  if (sessions.length === 0) {
+    return (
+      <div className="mx-auto flex max-w-lg flex-col items-center px-4 py-16 text-center">
+        <h1 className="sr-only">Insights</h1>
+        <Lightbulb className="mb-4 h-12 w-12 text-text-muted" aria-hidden="true" />
+        <p className="mb-1 text-lg font-medium text-text-base">Insights need a little history</p>
+        <p className="mb-5 text-sm text-text-sub">
+          After a few focus sessions you’ll see when you focus best and how consistent you are.
+        </p>
+        <Link to="/timer" className="btn-primary">
+          Start a focus session
+        </Link>
+      </div>
+    );
+  }
 
-  // KPI card data
-  const longSessions = useMemo(() => {
-    return periodSessions.filter((s) => s.type === 'focus' && s.duration_seconds > 50 * 60).length;
-  }, [periodSessions]);
-
-  const activeWeekdays = useMemo(() => {
-    const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-    return weekdayStats.filter((d) => weekdays.includes(d.name) && d.seconds > 0).length;
-  }, [weekdayStats]);
-
-  const deltaBadgeClass = (value: number) => {
-    if (value > 0) {
-      return 'text-[var(--color-success)]';
-    }
-    if (value < 0) {
-      return 'text-[var(--color-error)]';
-    }
-    return 'text-text-sub';
-  };
-
-  const deltaBadgeBg = (value: number) => {
-    if (value > 0) {
-      return 'color-mix(in srgb, var(--color-success) 10%, transparent)';
-    }
-    if (value < 0) {
-      return 'color-mix(in srgb, var(--color-error) 10%, transparent)';
-    }
-    return 'var(--bg-secondary)';
-  };
+  const hasPeriodData = periodFocus.length > 0;
 
   return (
-    <div className="p-6 lg:p-12 w-full 2xl:max-w-[1600px] 2xl:mx-auto animate-[page-enter_200ms_ease]">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-[28px] lg:text-[32px] font-semibold text-text-base leading-[1.05] mb-1">
-            Insights
-          </h1>
-          <p className="text-[15px] text-text-sub max-w-[60ch]">
-            Deep analytics into your focus patterns and productivity trends.
-          </p>
-        </div>
-        <PeriodHeader
-          label={periodLabel}
-          onPrev={handlePrev}
-          onNext={handleNext}
-          onToday={handleToday}
-          granularity={granularity}
-          onGranularityChange={(g) => {
-            setGranularity(g);
-            setCurrentDate(new Date());
-          }}
-          className="mb-0"
-        />
+    <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:p-12">
+      <div className="mb-4">
+        <h1 className="text-2xl font-semibold text-text-base">Insights</h1>
+        <p className="text-sm text-text-sub">When and how you focus best.</p>
       </div>
+      <PeriodHeader
+        label={nav.label}
+        onPrev={nav.prev}
+        onNext={nav.next}
+        onToday={nav.today}
+        isCurrent={isCurrent}
+        granularity={granularity}
+        onGranularityChange={nav.setGranularity}
+      />
 
-      {!hasData && (
-        <EmptyStateNotice
-          icon={Target}
-          title="No data yet"
-          subtitle="Complete some focus sessions to get insights — here's a preview of what you'll see"
-        />
-      )}
-      {hasData && !hasPeriodData && (
-        <EmptyStateNotice
-          icon={Target}
-          title="No data for this period"
-          subtitle="Try selecting a different time range"
-        />
-      )}
-
-      <div
-        className={
-          !hasData || !hasPeriodData ? 'opacity-50 pointer-events-none select-none' : undefined
-        }
-      >
+      {!hasPeriodData ? (
+        <p className="rounded-lg border border-dashed border-border-base p-8 text-center text-sm text-text-sub">
+          No focus sessions in this period. Try another {granularity}.
+        </p>
+      ) : (
         <>
-          {/* KPI Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <div className="bg-bg-card border border-border-base rounded-lg p-5 flex flex-col gap-3">
-              <div className="text-[13px] text-text-sub font-bold tracking-wide">
-                Total focus time
-              </div>
-              <div className="text-[34px] font-display font-extrabold leading-none text-text-base">
-                {formatDuration(periodStats.focus_seconds)}
-              </div>
-              <div
-                className="inline-flex items-center gap-2 w-fit max-w-full px-2.5 py-1.5 rounded-lg text-[12px] leading-snug font-bold"
-                style={{ backgroundColor: deltaBadgeBg(delta.focusSecondsDelta) }}
-              >
-                <span className={deltaBadgeClass(delta.focusSecondsDelta)}>
-                  {delta.focusSecondsDelta > 0 ? '+' : ''}
-                  {delta.focusSecondsDelta}% vs last {granularity}
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            <KpiCard
+              label="Focus time"
+              value={formatDuration(stats.focus_seconds)}
+              footnote={
+                <DeltaBadge
+                  delta={deltaPercent(stats.focus_seconds, prevStats.focus_seconds)}
+                  comparedTo={comparedTo}
+                />
+              }
+            />
+            <KpiCard
+              label="Active days"
+              value={`${consistency.activeDays}/${consistency.totalDays}`}
+              footnote={<span className="text-text-sub">{consistency.pct}% of days so far</span>}
+            />
+            <KpiCard
+              label="Best day"
+              value={bestDay ? bestDay.name.slice(0, 3) : '—'}
+              footnote={
+                <span className="text-text-sub">
+                  {bestDay ? `${formatDuration(bestDay.seconds)} focused` : 'No focus yet'}
                 </span>
-              </div>
-            </div>
-
-            <div className="bg-bg-card border border-border-base rounded-lg p-5 flex flex-col gap-3">
-              <div className="text-[13px] text-text-sub font-bold tracking-wide">
-                Completed sessions
-              </div>
-              <div className="text-[34px] font-display font-extrabold leading-none text-text-base">
-                {periodStats.sessions_completed}
-              </div>
-              <div
-                className="inline-flex items-center gap-2 w-fit max-w-full px-2.5 py-1.5 rounded-lg text-[12px] leading-snug font-bold"
-                style={{ backgroundColor: deltaBadgeBg(delta.sessionsDelta) }}
-              >
-                <span className={deltaBadgeClass(delta.sessionsDelta)}>
-                  {longSessions} longer than 50 min
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-bg-card border border-border-base rounded-lg p-5 flex flex-col gap-3">
-              <div className="text-[13px] text-text-sub font-bold tracking-wide">Best day</div>
-              <div className="text-[34px] font-display font-extrabold leading-none text-text-base">
-                {bestDay && bestDay.seconds > 0 ? bestDay.name.slice(0, 3) : '-'}
-              </div>
-              <div className="inline-flex items-center gap-2 w-fit max-w-full px-2.5 py-1.5 rounded-lg bg-bg-secondary text-text-sub text-[12px] leading-snug font-bold">
-                {bestDay && bestDay.seconds > 0
-                  ? `${(bestDay.seconds / 3600).toFixed(1)} hours focused`
-                  : 'No focus yet'}
-              </div>
-            </div>
-
-            <div className="bg-bg-card border border-border-base rounded-lg p-5 flex flex-col gap-3">
-              <div className="text-[13px] text-text-sub font-bold tracking-wide">Consistency</div>
-              <div className="text-[34px] font-display font-extrabold leading-none text-text-base">
-                {consistency > 0 ? `${activeWeekdays}/7` : '-'}
-              </div>
-              <div className="inline-flex items-center gap-2 w-fit max-w-full px-2.5 py-1.5 rounded-lg bg-bg-secondary text-text-sub text-[12px] leading-snug font-bold">
-                Active weekdays
-              </div>
-            </div>
-          </div>
-
-          {/* Two-column grid: weekday chart + focus distribution */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] gap-4 mb-6 items-stretch">
-            <WeekdayChart data={weekdayStats} insight={weekdayInsight} />
-            <FocusDistribution
-              items={focusDistribution.items}
-              topNShare={top2Share}
-              weeklyTargetPct={weeklyTargetPct}
+              }
+            />
+            <KpiCard
+              label="Longest session"
+              value={longest > 0 ? formatDuration(longest) : '—'}
+              footnote={<span className="text-text-sub">Best month: {bestMonth.name}</span>}
             />
           </div>
 
-          {/* 30-day trend */}
-          <div className="mb-6">
-            <TrendChart data={trendData} />
+          <div className="mb-6 grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[1.55fr_1fr]">
+            <WeekdayChart data={weekdayStats} />
+            <section className="rounded-lg border border-border-base bg-bg-card p-5">
+              <h2 className="text-md font-semibold text-text-base">Time of day</h2>
+              <p className="mb-4 mt-0.5 text-sm text-text-sub">When your focus sessions start</p>
+              <ul className="flex flex-col gap-3">
+                {dayparts.map((d) => (
+                  <li key={d.id}>
+                    <div className="mb-1 flex items-baseline justify-between text-sm">
+                      <span className="font-semibold text-text-base">
+                        {d.label} <span className="font-normal text-text-muted">{d.range}</span>
+                      </span>
+                      <span className="tabular-nums text-text-sub">
+                        {formatDuration(d.seconds)}
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-bg-tertiary">
+                      <div
+                        className="h-full rounded-full bg-brand"
+                        style={{ width: `${d.pct}%` }}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
           </div>
 
-          {/* Recommendations */}
-          <div>
-            <h2 className="text-sm font-semibold text-text-base uppercase tracking-wide mb-4">
-              Personalized recommendations
-            </h2>
-            <div className="flex flex-col gap-4">
-              <div className="bg-bg-card border border-border-base rounded-lg p-5">
-                <div className="flex items-center gap-2 mb-2">
-                  <Brain className="w-5 h-5 text-brand" />
-                  <span className="text-sm font-semibold text-text-base">Your productive time</span>
-                </div>
-                <p className="text-sm text-text-sub">
-                  {daytimeStats.stats.morning >= daytimeStats.stats.noon &&
-                  daytimeStats.stats.morning >= daytimeStats.stats.evening
-                    ? "You're most productive in the morning. Schedule your most important tasks before noon."
-                    : daytimeStats.stats.noon >= daytimeStats.stats.evening
-                      ? "You're most productive around noon. Use this time for deep work."
-                      : "You're most productive in the evening. Plan your heavy tasks for late hours."}
-                </p>
-              </div>
-
-              {topProject && (
-                <div className="bg-bg-card border border-border-base rounded-lg p-5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Calendar className="w-5 h-5 text-brand" />
-                    <span className="text-sm font-semibold text-text-base">Top project</span>
-                  </div>
-                  <p className="text-sm text-text-sub">
-                    You've focused the most on{' '}
-                    <span
-                      className="font-medium"
-                      style={{
-                        color: PROJECT_COLORS[topProject.color],
-                      }}
-                    >
-                      {topProject.name}
-                    </span>
-                    . Keep up the momentum!
-                  </p>
-                </div>
-              )}
-
-              <div className="bg-bg-card border border-border-base rounded-lg p-5">
-                <div className="flex items-center gap-2 mb-2">
-                  <Target className="w-5 h-5 text-brand" />
-                  <span className="text-sm font-semibold text-text-base">Consistency tip</span>
-                </div>
-                <p className="text-sm text-text-sub">
-                  {consistencyScore >= 70
-                    ? 'Great consistency! You maintain a strong daily focus habit.'
-                    : consistencyScore >= 40
-                      ? 'Building momentum. Try to focus at least 4 days a week for better results.'
-                      : "Let's build the habit. Start with just 1 focus session per day."}
-                </p>
-              </div>
-            </div>
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-text-base">
+            Suggestions
+          </h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <Recommendation icon={Brain} title="Your best time">
+              Most of your focus starts in the {bestDaypart.label.toLowerCase()} (
+              {bestDaypart.range}). Protect that window for your hardest work.
+            </Recommendation>
+            {topProject && (
+              <Recommendation icon={Calendar} title="Where your time went">
+                {topProject.name} took {topProject.pct}% of your focus this {granularity}
+                {topProject.pct >= 70 ? ' — make sure other priorities aren’t slipping.' : '.'}
+              </Recommendation>
+            )}
+            <Recommendation icon={Target} title="Consistency">
+              {consistency.pct >= 70
+                ? `You focused on ${consistency.activeDays} of ${consistency.totalDays} days. That’s a strong habit.`
+                : consistency.pct >= 40
+                  ? `You focused on ${consistency.activeDays} of ${consistency.totalDays} days. A short session on the quiet days would build momentum.`
+                  : `You focused on ${consistency.activeDays} of ${consistency.totalDays} days. Try one 25-minute session a day to build the habit.`}
+            </Recommendation>
           </div>
         </>
-      </div>
+      )}
     </div>
   );
 }

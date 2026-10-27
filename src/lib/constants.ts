@@ -12,3 +12,9 @@ export const PROJECT_COLORS: Record<import('@/types').ProjectColor, string> = {
   yellow: '#F39C12',
   slate: '#7F8C8D',
 };
+
+export const PRIORITY = {
+  high: { dot: 'bg-red-600', label: 'High priority' },
+  medium: { dot: 'bg-amber-500', label: 'Medium priority' },
+  low: { dot: 'bg-sky-600', label: 'Low priority' },
+} as const;

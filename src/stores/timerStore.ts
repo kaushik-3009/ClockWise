@@ -131,6 +131,9 @@ export function isFreshSession(s: TimerData): boolean {
 }
 
 function derived(s: TimerData, now: number) {
+  if (s.status === 'session_complete') {
+    return { elapsed_seconds: s.phase_duration_seconds, remaining_seconds: 0, clock_now: now };
+  }
   const el = Math.min(elapsedMs(s, now), s.phase_duration_seconds * 1000);
   return {
     elapsed_seconds: Math.floor(el / 1000),
@@ -313,8 +316,11 @@ export const useTimerStore = create<TimerStore>()(
       name: 'clockwise-timer-v2',
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => {
+        // Derived, per-second values aren't saved: they're recomputed from the
+        // timestamps, and leaving them out means storage only changes on real
+        // state changes (which is what other open tabs sync on).
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { settings, clock_now, ...rest } = s;
+        const { settings, clock_now, remaining_seconds, elapsed_seconds, ...rest } = s;
         return Object.fromEntries(
           Object.entries(rest).filter(([, v]) => typeof v !== 'function')
         ) as Partial<TimerData>;
@@ -323,7 +329,8 @@ export const useTimerStore = create<TimerStore>()(
       merge: (persisted, current) => {
         const p = persisted as Partial<TimerData> | undefined;
         if (!p || !Array.isArray(p.plan) || p.plan.length === 0) return current;
-        return { ...current, ...p, settings: current.settings };
+        const merged = { ...current, ...p, settings: current.settings };
+        return { ...merged, ...derived(merged, Date.now()) };
       },
     }
   )

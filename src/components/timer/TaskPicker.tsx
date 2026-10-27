@@ -29,11 +29,11 @@ export function TaskPicker({
   const [newProjectName, setNewProjectName] = useState('');
   const [creatingTaskProjectId, setCreatingTaskProjectId] = useState<string | null>(null);
   const [newTaskName, setNewTaskName] = useState('');
-  const [busy, setBusy] = useState(false);
 
   const tasksByProject = useMemo(() => {
     const map = new Map<string, typeof allTasks>();
     for (const t of allTasks) {
+      if (t.is_completed) continue;
       const pid = t.project_id ?? 'none';
       const arr = map.get(pid) ?? [];
       arr.push(t);
@@ -97,30 +97,20 @@ export function TaskPicker({
     onClose();
   };
 
-  const handleCreateProject = async () => {
+  const handleCreateProject = () => {
     const name = newProjectName.trim();
-    if (!name || busy) return;
-    setBusy(true);
-    try {
-      const project = await addProject({ name, color: 'orange' });
-      onSelect(project.id, undefined);
-      handleClose();
-    } finally {
-      setBusy(false);
-    }
+    if (!name) return;
+    const project = addProject({ name, color: 'orange' });
+    onSelect(project.id, undefined);
+    handleClose();
   };
 
-  const handleCreateTask = async (projectId: string) => {
+  const handleCreateTask = (projectId: string) => {
     const name = newTaskName.trim();
-    if (!name || busy) return;
-    setBusy(true);
-    try {
-      const task = await addTask({ name, project_id: projectId });
-      onSelect(projectId, task.id);
-      handleClose();
-    } finally {
-      setBusy(false);
-    }
+    if (!name) return;
+    const task = addTask({ name, project_id: projectId });
+    onSelect(projectId, task.id);
+    handleClose();
   };
 
   return (
@@ -131,17 +121,21 @@ export function TaskPicker({
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.stopPropagation()}
-            placeholder="Search projects or tasks..."
-            className="w-full h-10 pl-9 pr-8 rounded-md border border-border-base bg-bg-secondary text-text-base text-sm outline-none focus:border-brand transition-colors"
+            placeholder="Search projects or tasks…"
+            aria-label="Search projects or tasks"
+            type="search"
+            enterKeyHint="search"
+            className="field pl-9 pr-10"
             autoFocus
           />
           {search && (
             <button
+              type="button"
               onClick={() => setSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-text-muted hover:text-text-base"
+              aria-label="Clear search"
+              className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-text-muted hover:text-text-base"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -153,14 +147,15 @@ export function TaskPicker({
               onSelect(undefined, undefined);
               handleClose();
             }}
-            className="flex items-center gap-2 text-sm text-text-sub hover:text-error transition-colors self-start"
+            type="button"
+            className="flex min-h-11 items-center gap-2 self-start text-sm text-text-sub transition-colors hover:text-error-text"
           >
             <X className="w-4 h-4" />
-            Clear selection
+            Focus without a project
           </button>
         )}
 
-        <div className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1">
+        <div className="flex flex-col gap-2">
           {filteredProjects.length === 0 && (
             <p className="text-sm text-text-muted text-center py-4">
               No projects or tasks match your search
@@ -186,7 +181,7 @@ export function TaskPicker({
                 <button
                   onClick={() => handleSelectProject(project.id)}
                   className={cn(
-                    'flex items-center gap-2.5 px-3 py-2.5 rounded-md text-left transition-colors',
+                    'flex min-h-11 items-center gap-2.5 rounded-md px-3 py-2 text-left transition-colors',
                     isProjectSelected && !selectedTaskId
                       ? 'bg-brand-light'
                       : 'hover:bg-bg-secondary'
@@ -203,7 +198,7 @@ export function TaskPicker({
                     )}
                   </div>
                   {isProjectSelected && !selectedTaskId && (
-                    <Check className="w-4 h-4 text-brand shrink-0" />
+                    <Check className="w-4 h-4 text-brand-text shrink-0" />
                   )}
                   {!isProjectSelected && !selectedTaskId && (
                     <Layers className="w-4 h-4 text-text-muted shrink-0" />
@@ -220,7 +215,7 @@ export function TaskPicker({
                           key={task.id}
                           onClick={() => handleSelectTask(project.id, task.id)}
                           className={cn(
-                            'flex items-center gap-2 px-3 py-2 rounded-md text-left transition-colors',
+                            'flex min-h-11 items-center gap-2 rounded-md px-3 text-left transition-colors',
                             isTaskSelected ? 'bg-brand-light' : 'hover:bg-bg-secondary'
                           )}
                         >
@@ -231,14 +226,14 @@ export function TaskPicker({
                           <span
                             className={cn(
                               'text-sm truncate',
-                              isTaskSelected ? 'text-brand font-medium' : 'text-text-sub',
+                              isTaskSelected ? 'text-brand-text font-medium' : 'text-text-sub',
                               isTaskMatch(task.name) && hasSearch && 'font-medium'
                             )}
                           >
                             {task.name}
                           </span>
                           {isTaskSelected && (
-                            <Check className="w-3.5 h-3.5 text-brand shrink-0 ml-auto" />
+                            <Check className="w-3.5 h-3.5 text-brand-text shrink-0 ml-auto" />
                           )}
                         </button>
                       );
@@ -260,19 +255,21 @@ export function TaskPicker({
                             e.preventDefault();
                             handleCreateTask(project.id);
                           } else if (e.key === 'Escape') {
+                            e.preventDefault();
                             setCreatingTaskProjectId(null);
                             setNewTaskName('');
                           }
                         }}
                         maxLength={MAX_NAME_LENGTH}
                         placeholder="New task name..."
-                        className="flex-1 h-8 px-2.5 rounded-md border border-border-base bg-bg-secondary text-text-base text-sm outline-none focus:border-brand transition-colors"
+                        aria-label="New task name"
+                        className="field h-10 flex-1"
                       />
                       <button
                         type="button"
-                        disabled={!newTaskName.trim() || busy}
+                        disabled={!newTaskName.trim()}
                         onClick={() => handleCreateTask(project.id)}
-                        className="h-8 px-2.5 rounded-md bg-brand text-white text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-brand-hover transition-colors"
+                        className="btn-primary h-10 min-h-0 px-3"
                       >
                         Add
                       </button>
@@ -282,8 +279,8 @@ export function TaskPicker({
                           setCreatingTaskProjectId(null);
                           setNewTaskName('');
                         }}
-                        className="p-1.5 text-text-muted hover:text-text-base"
-                        aria-label="Cancel"
+                        className="flex h-10 w-10 items-center justify-center text-text-muted hover:text-text-base"
+                        aria-label="Cancel new task"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -295,7 +292,7 @@ export function TaskPicker({
                         setCreatingTaskProjectId(project.id);
                         setNewTaskName('');
                       }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-muted hover:text-brand transition-colors"
+                      className="flex min-h-10 items-center gap-1.5 px-3 text-xs text-text-sub transition-colors hover:text-brand-text"
                     >
                       <Plus className="w-3 h-3" />
                       Add task
@@ -321,19 +318,21 @@ export function TaskPicker({
                     e.preventDefault();
                     handleCreateProject();
                   } else if (e.key === 'Escape') {
+                    e.preventDefault();
                     setShowNewProject(false);
                     setNewProjectName('');
                   }
                 }}
                 maxLength={MAX_NAME_LENGTH}
                 placeholder="New project name..."
-                className="flex-1 h-9 px-3 rounded-md border border-border-base bg-bg-secondary text-text-base text-sm outline-none focus:border-brand transition-colors"
+                aria-label="New project name"
+                className="field h-10 flex-1"
               />
               <button
                 type="button"
-                disabled={!newProjectName.trim() || busy}
+                disabled={!newProjectName.trim()}
                 onClick={handleCreateProject}
-                className="h-9 px-3 rounded-md bg-brand text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-brand-hover transition-colors"
+                className="btn-primary h-10 min-h-0 px-3"
               >
                 Create
               </button>
@@ -343,8 +342,8 @@ export function TaskPicker({
                   setShowNewProject(false);
                   setNewProjectName('');
                 }}
-                className="p-2 text-text-muted hover:text-text-base"
-                aria-label="Cancel"
+                className="flex h-10 w-10 items-center justify-center text-text-muted hover:text-text-base"
+                aria-label="Cancel new project"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -356,7 +355,7 @@ export function TaskPicker({
                 setShowNewProject(true);
                 setNewProjectName(search.trim());
               }}
-              className="flex items-center gap-2 text-sm text-text-sub hover:text-brand transition-colors"
+              className="flex min-h-11 items-center gap-2 text-sm text-text-sub transition-colors hover:text-brand-text"
             >
               <Plus className="w-4 h-4" />
               New project

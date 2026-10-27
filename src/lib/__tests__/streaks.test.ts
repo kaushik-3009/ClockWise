@@ -66,6 +66,35 @@ describe('computeCurrentStreak', () => {
   });
 });
 
+describe('streak rules', () => {
+  it('has no upper limit (was capped at 365)', () => {
+    const now = new Date(2026, 4, 31, 12);
+    const sessions = Array.from({ length: 500 }, (_, i) =>
+      makeSession({ started_at: new Date(2026, 4, 31 - i, 10).getTime() })
+    );
+    expect(computeCurrentStreak(sessions, now)).toBe(500);
+  });
+
+  it('a 0-second abandoned session does not keep a streak alive', () => {
+    const now = new Date(2026, 4, 31, 12);
+    const sessions = [
+      makeSession({ started_at: new Date(2026, 4, 31, 9).getTime(), duration_seconds: 0 }),
+      makeSession({ started_at: new Date(2026, 4, 29, 9).getTime() }),
+    ];
+    expect(computeCurrentStreak(sessions, now)).toBe(0);
+  });
+
+  it('counts across a DST change', () => {
+    // Europe/US DST changes happen in late March / early November.
+    const now = new Date(2026, 10, 3, 12);
+    const sessions = Array.from({ length: 10 }, (_, i) =>
+      makeSession({ started_at: new Date(2026, 10, 3 - i, 10).getTime() })
+    );
+    expect(computeCurrentStreak(sessions, now)).toBe(10);
+    expect(computeLongestStreak(sessions)).toBe(10);
+  });
+});
+
 describe('computeLongestStreak', () => {
   it('returns 0 when there are no sessions', () => {
     expect(computeLongestStreak([])).toBe(0);

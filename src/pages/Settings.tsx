@@ -312,7 +312,7 @@ export function SettingsPage() {
         title="Timer"
         description={`One session: ${focusCount} focus phases, about ${formatDuration(planSeconds)} in total. Changes apply from the next session.`}
       >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-4">
           <NumberField
             label="Focus"
             suffix="min"

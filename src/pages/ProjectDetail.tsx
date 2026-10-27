@@ -1,258 +1,237 @@
 import { useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Pencil, Trash2, Archive, Plus } from 'lucide-react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { ArrowLeft, Pencil, Trash2, Archive, ArchiveRestore, Plus, Play } from 'lucide-react';
 import { useProjects } from '@/hooks/useProjects';
 import { useTasks } from '@/hooks/useTasks';
 import { useSessions } from '@/hooks/useSessions';
+import { usePageTitle } from '@/hooks/usePageTitle';
+import { useTimerStore } from '@/stores/timerStore';
 import { TaskRow } from '@/components/projects/TaskRow';
 import { ProjectForm } from '@/components/projects/ProjectForm';
 import { TaskForm } from '@/components/projects/TaskForm';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { PageSpinner } from '@/components/ui/Skeleton';
+import { toast } from '@/components/ui/Toast';
 import { PROJECT_COLORS } from '@/lib/constants';
-import { formatHHMMSS } from '@/lib/time';
-import type { Project, Task } from '@/types';
+import { completedFocusCountBy, focusSecondsBy } from '@/lib/stats';
+import { formatDuration } from '@/lib/time';
+import type { Task } from '@/types';
+
+const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 } as const;
+
+const headerBtn =
+  'flex h-11 w-11 items-center justify-center rounded-md text-text-sub transition-colors hover:bg-bg-secondary hover:text-text-base';
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { projects, editProject, removeProject, archive } = useProjects();
-  const { tasks, addTask, editTask, removeTask } = useTasks(id);
+  const { projects, activeProjects, loading, editProject, removeProject, archive, unarchive } =
+    useProjects();
+  const { tasks, addTask, editTask, removeTask, setCompleted } = useTasks(id);
   const { sessions } = useSessions(id);
+  const setTimerContext = useTimerStore((s) => s.setContext);
 
   const [editProjectOpen, setEditProjectOpen] = useState(false);
   const [addTaskOpen, setAddTaskOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [confirmDialog, setConfirmDialog] = useState<{
-    open: boolean;
+  const [confirm, setConfirm] = useState<{
     title: string;
     description: string;
+    label: string;
     onConfirm: () => void;
-    variant?: 'danger' | 'default';
-  }>({ open: false, title: '', description: '', onConfirm: () => {} });
+  } | null>(null);
 
   const project = useMemo(() => projects.find((p) => p.id === id), [projects, id]);
+  usePageTitle(project?.name ?? 'Project');
 
-  const color = project ? PROJECT_COLORS[project.color] : undefined;
+  const totalFocusSeconds = useMemo(
+    () =>
+      sessions.filter((s) => s.type === 'focus').reduce((sum, s) => sum + s.duration_seconds, 0),
+    [sessions]
+  );
+  const completedCount = useMemo(
+    () => sessions.filter((s) => s.type === 'focus' && s.completed).length,
+    [sessions]
+  );
+  const taskTotals = useMemo(() => focusSecondsBy(sessions, (s) => s.task_id), [sessions]);
+  const taskPomodoros = useMemo(
+    () => completedFocusCountBy(sessions, (s) => s.task_id),
+    [sessions]
+  );
 
-  const totalFocusSeconds = useMemo(() => {
-    return sessions
-      .filter((s) => s.type === 'focus' && s.completed)
-      .reduce((sum, s) => sum + s.duration_seconds, 0);
-  }, [sessions]);
+  // Open tasks first (by priority), completed tasks last.
+  const sortedTasks = useMemo(
+    () =>
+      [...tasks].sort((a, b) => {
+        if (a.is_completed !== b.is_completed) return a.is_completed ? 1 : -1;
+        const pa = a.priority ? PRIORITY_ORDER[a.priority] : 3;
+        const pb = b.priority ? PRIORITY_ORDER[b.priority] : 3;
+        return pa - pb || b.created_at - a.created_at;
+      }),
+    [tasks]
+  );
 
-  const taskTotals = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const s of sessions) {
-      if (s.task_id && s.type === 'focus' && s.completed) {
-        map.set(s.task_id, (map.get(s.task_id) ?? 0) + s.duration_seconds);
-      }
-    }
-    return map;
-  }, [sessions]);
-
-  const taskPomodoros = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const s of sessions) {
-      if (s.task_id && s.type === 'focus' && s.completed) {
-        map.set(s.task_id, (map.get(s.task_id) ?? 0) + 1);
-      }
-    }
-    return map;
-  }, [sessions]);
-
-  const [activeFilter, setActiveFilter] = useState<string | null>(null);
-  const sortedTasks = useMemo(() => {
-    const priorityOrder = { high: 0, medium: 1, low: 2 };
-    return [...tasks].sort((a, b) => {
-      const aPriority = a.priority ? priorityOrder[a.priority] : 3;
-      const bPriority = b.priority ? priorityOrder[b.priority] : 3;
-      return aPriority - bPriority;
-    });
-  }, [tasks]);
-  const filteredTasks = activeFilter
-    ? sortedTasks.filter((t) => t.id === activeFilter)
-    : sortedTasks;
+  if (loading) return <PageSpinner />;
 
   if (!project) {
     return (
-      <div className="p-8">
-        <button
-          onClick={() => navigate('/projects')}
-          className="flex items-center gap-2 text-text-sub hover:text-text-base mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </button>
-        <p className="text-text-muted">Project not found</p>
+      <div className="mx-auto max-w-lg px-4 py-16 text-center">
+        <h1 className="text-lg font-semibold text-text-base">Project not found</h1>
+        <p className="mt-1 text-sm text-text-sub">It may have been deleted.</p>
+        <Link to="/projects" className="btn-secondary mt-6">
+          Back to projects
+        </Link>
       </div>
     );
   }
 
-  const handleEditProject = (data: {
-    name: string;
-    description?: string;
-    color: Project['color'];
-  }) => {
-    editProject(project.id, data);
-    setEditProjectOpen(false);
-  };
+  const color = PROJECT_COLORS[project.color];
+  const archived = project.status === 'archived';
 
-  const handleDeleteProject = () => {
-    setConfirmDialog({
-      open: true,
-      title: 'Delete Project',
-      description: `Delete "${project.name}" and all its tasks and sessions? This cannot be undone.`,
-      onConfirm: () => {
-        removeProject(project.id);
-        navigate('/projects');
-      },
-      variant: 'danger',
-    });
-  };
-
-  const handleArchiveProject = () => {
-    setConfirmDialog({
-      open: true,
-      title: 'Archive Project',
-      description: `Archive "${project.name}"? It will be hidden from the main list but data is preserved.`,
-      onConfirm: () => {
-        archive(project.id);
-        navigate('/projects');
-      },
-      variant: 'default',
-    });
-  };
-
-  const handleDeleteTask = (task: Task) => {
-    setConfirmDialog({
-      open: true,
-      title: 'Delete Task',
-      description: `Delete "${task.name}" and its sessions? This cannot be undone.`,
-      onConfirm: () => removeTask(task.id),
-      variant: 'danger',
-    });
+  const focusOn = (taskId?: string) => {
+    setTimerContext(project.id, taskId);
+    navigate('/timer');
   };
 
   return (
-    <div className="p-6 lg:p-12 w-full 2xl:max-w-[1600px] 2xl:mx-auto animate-[page-enter_200ms_ease]">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <button
-          onClick={() => navigate('/projects')}
-          className="flex items-center gap-2 text-text-sub hover:text-text-base transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-
-        <div className="flex items-center gap-1">
+    <div className="mx-auto w-full max-w-[1000px] px-4 py-6 sm:px-6 lg:p-12">
+      <div className="mb-4 flex items-center justify-between">
+        <Link to="/projects" className={headerBtn} aria-label="Back to projects">
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+        <div className="flex items-center">
           <button
+            type="button"
             onClick={() => setEditProjectOpen(true)}
-            className="p-2 text-text-muted hover:text-text-base hover:bg-bg-secondary rounded-md transition-colors"
+            className={headerBtn}
             aria-label="Edit project"
           >
-            <Pencil className="w-4 h-4" />
+            <Pencil className="h-4 w-4" />
           </button>
+          {archived ? (
+            <button
+              type="button"
+              onClick={() => {
+                unarchive(project.id);
+                toast.success(`"${project.name}" restored.`);
+              }}
+              className={headerBtn}
+              aria-label="Restore project"
+            >
+              <ArchiveRestore className="h-4 w-4" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                archive(project.id);
+                toast.info(`"${project.name}" archived.`, {
+                  label: 'Undo',
+                  onClick: () => unarchive(project.id),
+                });
+                navigate('/projects');
+              }}
+              className={headerBtn}
+              aria-label="Archive project"
+            >
+              <Archive className="h-4 w-4" />
+            </button>
+          )}
           <button
-            onClick={handleArchiveProject}
-            className="p-2 text-text-muted hover:text-brand hover:bg-brand-alpha rounded-md transition-colors"
-            aria-label="Archive project"
-          >
-            <Archive className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleDeleteProject}
-            className="p-2 text-text-muted hover:text-error hover:bg-error/10 rounded-md transition-colors"
+            type="button"
+            onClick={() =>
+              setConfirm({
+                title: `Delete "${project.name}"?`,
+                description:
+                  'The project and its tasks will be deleted. Focus time you already logged stays in your history and stats.',
+                label: 'Delete project',
+                onConfirm: () => {
+                  removeProject(project.id);
+                  navigate('/projects');
+                },
+              })
+            }
+            className={`${headerBtn} hover:bg-error-light hover:text-error-text`}
             aria-label="Delete project"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      {/* Project info */}
-      <div className="mb-8">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
-          <h1 className="text-xl font-semibold text-text-base">{project.name}</h1>
-          <span className="px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wide bg-bg-tertiary text-text-sub border border-border-base">
-            {project.status}
-          </span>
+      <div className="mb-8 flex flex-col gap-4 rounded-lg border border-border-base bg-bg-card p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+            <h1 className="min-w-0 break-words text-xl font-semibold text-text-base">
+              {project.name}
+            </h1>
+            {archived && (
+              <span className="rounded bg-bg-tertiary px-2 py-0.5 text-xs font-semibold text-text-sub">
+                Archived
+              </span>
+            )}
+          </div>
+          {project.description && <p className="text-sm text-text-sub">{project.description}</p>}
+          <p className="mt-3 text-sm text-text-sub">
+            <span className="font-display text-3xl font-bold italic text-text-base">
+              {formatDuration(totalFocusSeconds)}
+            </span>{' '}
+            focused · {completedCount} completed {completedCount === 1 ? 'pomodoro' : 'pomodoros'}
+          </p>
         </div>
-        {project.description && <p className="text-sm text-text-sub">{project.description}</p>}
-      </div>
-
-      {/* Total time */}
-      <div className="flex justify-center mb-10">
-        <span className="font-mono text-timer-hms font-medium tracking-wide text-text-base">
-          {formatHHMMSS(totalFocusSeconds)}
-        </span>
-      </div>
-
-      {/* Task filter chips */}
-      {tasks.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide mb-8 pb-1">
-          <button
-            onClick={() => setActiveFilter(null)}
-            className={`shrink-0 h-8 px-3.5 rounded-pill text-[13px] font-medium border transition-colors duration-fast ${
-              activeFilter === null
-                ? 'border-brand text-text-base font-semibold'
-                : 'border-border-base text-text-sub hover:border-text-sub'
-            }`}
-          >
-            All ({tasks.length})
+        {!archived && (
+          <button type="button" onClick={() => focusOn()} className="btn-primary shrink-0">
+            <Play className="h-4 w-4 fill-current" aria-hidden="true" />
+            Focus on this project
           </button>
-          {tasks.map((task) => (
-            <button
-              key={task.id}
-              onClick={() => setActiveFilter((prev) => (prev === task.id ? null : task.id))}
-              className={`shrink-0 h-8 px-3.5 rounded-pill text-[13px] font-medium border transition-colors duration-fast ${
-                activeFilter === task.id
-                  ? 'border-brand text-text-base font-semibold'
-                  : 'border-border-base text-text-sub hover:border-text-sub'
-              }`}
-            >
-              {task.name}
-            </button>
-          ))}
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Tasks list header */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold text-text-base uppercase tracking-wide">Tasks</h2>
-        <button
-          onClick={() => setAddTaskOpen(true)}
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border-base text-xs font-medium text-text-sub hover:text-brand hover:border-brand transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" />
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-text-base">
+          Tasks{' '}
+          <span className="text-text-muted">{tasks.filter((t) => !t.is_completed).length}</span>
+        </h2>
+        <button type="button" onClick={() => setAddTaskOpen(true)} className="btn-secondary">
+          <Plus className="h-4 w-4" aria-hidden="true" />
           Add task
         </button>
       </div>
 
-      {/* Tasks list */}
-      {filteredTasks.length === 0 ? (
-        <p className="text-text-muted text-sm">No tasks in this project yet</p>
+      {sortedTasks.length === 0 ? (
+        <p className="rounded-md border border-dashed border-border-base p-6 text-center text-sm text-text-sub">
+          No tasks yet. Break the project into tasks to see where the time goes.
+        </p>
       ) : (
         <div className="flex flex-col gap-3">
-          {filteredTasks.map((task) => (
+          {sortedTasks.map((task) => (
             <TaskRow
               key={task.id}
               task={task}
-              project={project}
               totalFocusSeconds={taskTotals.get(task.id) ?? 0}
               completedPomodoros={taskPomodoros.get(task.id) ?? 0}
+              onToggleComplete={(done) => setCompleted(task.id, done)}
               onEdit={() => setEditingTask(task)}
-              onDelete={() => handleDeleteTask(task)}
+              onDelete={() =>
+                setConfirm({
+                  title: `Delete "${task.name}"?`,
+                  description:
+                    'The task will be deleted. Focus time you logged on it stays in your history.',
+                  label: 'Delete task',
+                  onConfirm: () => removeTask(task.id),
+                })
+              }
+              onPlay={archived ? undefined : () => focusOn(task.id)}
             />
           ))}
         </div>
       )}
 
-      {/* Modals */}
       <ProjectForm
         open={editProjectOpen}
         onClose={() => setEditProjectOpen(false)}
-        onSubmit={handleEditProject}
+        onSubmit={(data) => editProject(project.id, data)}
         initialData={project}
       />
 
@@ -263,26 +242,22 @@ export function ProjectDetailPage() {
           setEditingTask(null);
         }}
         onSubmit={(data) => {
-          if (editingTask) {
-            editTask(editingTask.id, data);
-            setEditingTask(null);
-          } else {
-            addTask({ ...data, project_id: id });
-            setAddTaskOpen(false);
-          }
+          if (editingTask) editTask(editingTask.id, data);
+          else addTask(data);
         }}
-        projects={project ? [project] : []}
+        projects={archived ? [project, ...activeProjects] : activeProjects}
         initialData={editingTask ?? undefined}
+        defaultProjectId={project.id}
       />
 
       <ConfirmDialog
-        open={confirmDialog.open}
-        onClose={() => setConfirmDialog((prev) => ({ ...prev, open: false }))}
-        onConfirm={confirmDialog.onConfirm}
-        title={confirmDialog.title}
-        description={confirmDialog.description}
-        confirmLabel="Confirm"
-        variant={confirmDialog.variant}
+        open={confirm !== null}
+        onClose={() => setConfirm(null)}
+        onConfirm={() => confirm?.onConfirm()}
+        title={confirm?.title ?? ''}
+        description={confirm?.description ?? ''}
+        confirmLabel={confirm?.label}
+        variant="danger"
       />
     </div>
   );

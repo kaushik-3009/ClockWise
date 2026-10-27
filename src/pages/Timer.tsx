@@ -4,6 +4,7 @@ import { timerPause, timerPlay, timerReset, timerSkip, timerToggle } from '@/lib
 import { useProjects } from '@/hooks/useProjects';
 import { useTasks } from '@/hooks/useTasks';
 import { useTimerShortcuts } from '@/hooks/useTimerShortcuts';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { ModeHeader } from '@/components/timer/ModeHeader';
 import { PhaseBadge } from '@/components/timer/PhaseBadge';
 import { TimerDisplay } from '@/components/timer/TimerDisplay';
@@ -27,6 +28,7 @@ const STATUS_ANNOUNCEMENT: Record<string, string> = {
 const PHASE_NAME = { focus: 'Focus', short_break: 'Short break', long_break: 'Long break' };
 
 export function TimerPage() {
+  usePageTitle('Timer');
   const status = useTimerStore((s) => s.status);
   const phaseType = useTimerStore((s) => s.phase_type);
   const phaseNumber = useTimerStore((s) => s.phase_number);
@@ -92,7 +94,7 @@ export function TimerPage() {
   const nextPhase = status === 'session_complete' ? undefined : plan[phaseNumber];
 
   return (
-    <div className="flex min-h-full flex-col text-center">
+    <div className="flex flex-1 flex-col text-center">
       <h1 className="sr-only">Timer</h1>
       <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-6 sm:gap-5 lg:gap-6">
         <ModeHeader phaseType={phaseType} />

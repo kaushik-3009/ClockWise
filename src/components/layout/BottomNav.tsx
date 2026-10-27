@@ -33,7 +33,7 @@ function MiniTimer() {
   return (
     <NavLink
       to="/timer"
-      className="absolute inset-x-3 bottom-full mb-2 flex h-11 items-center justify-between rounded-full bg-text-base px-4 text-sm font-semibold text-bg-primary shadow-elevated"
+      className="mx-3 mt-2 flex h-11 items-center justify-between rounded-full bg-text-base px-4 text-sm font-semibold text-bg-primary"
     >
       <span className="flex items-center gap-2">
         <span
@@ -83,24 +83,27 @@ export function BottomNav() {
     // Height grows by the home-indicator inset instead of squeezing the tabs.
     <nav
       aria-label="Main"
-      className="safe-bottom relative z-40 flex shrink-0 items-stretch justify-around border-t border-border-base bg-bg-sidebar lg:hidden"
+      className="safe-bottom relative z-40 flex shrink-0 flex-col border-t border-border-base bg-bg-sidebar lg:hidden"
     >
+      {/* In normal flow (not floating) so it never covers page content. */}
       <MiniTimer />
-      {tabs.map((item) => (
-        <NavLink key={item.path} to={item.path} className={({ isActive }) => tabClass(isActive)}>
-          <item.icon className="h-5 w-5" aria-hidden="true" />
-          <span>{item.label}</span>
-        </NavLink>
-      ))}
-      <button
-        type="button"
-        onClick={() => setMoreOpen(true)}
-        className={tabClass(moreActive)}
-        aria-haspopup="dialog"
-      >
-        <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
-        <span>More</span>
-      </button>
+      <div className="flex items-stretch justify-around">
+        {tabs.map((item) => (
+          <NavLink key={item.path} to={item.path} className={({ isActive }) => tabClass(isActive)}>
+            <item.icon className="h-5 w-5" aria-hidden="true" />
+            <span>{item.label}</span>
+          </NavLink>
+        ))}
+        <button
+          type="button"
+          onClick={() => setMoreOpen(true)}
+          className={tabClass(moreActive)}
+          aria-haspopup="dialog"
+        >
+          <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
+          <span>More</span>
+        </button>
+      </div>
 
       <Modal open={moreOpen} onClose={() => setMoreOpen(false)} title="More">
         <div className="flex flex-col gap-1">

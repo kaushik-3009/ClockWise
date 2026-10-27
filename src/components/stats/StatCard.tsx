@@ -1,46 +1,43 @@
-import { memo } from 'react';
 import { cn } from '@/lib/cn';
 
-interface StatCardProps {
+interface KpiCardProps {
   label: string;
   value: string;
-  subtitle?: string;
-  delta?: number;
+  /** Small caption under the value (e.g. a comparison). */
+  footnote?: React.ReactNode;
   className?: string;
 }
 
-export const StatCard = memo(function StatCard({
-  label,
-  value,
-  subtitle,
-  delta,
-  className,
-}: StatCardProps) {
-  const deltaPositive = delta !== undefined && delta >= 0;
-
+export function KpiCard({ label, value, footnote, className }: KpiCardProps) {
   return (
     <div
       className={cn(
-        'relative flex-1 bg-bg-card border border-border-base rounded-md p-5 px-6',
+        'flex flex-col gap-2 rounded-lg border border-border-base bg-bg-card p-4 sm:p-5',
         className
       )}
     >
-      {delta !== undefined && (
-        <span
-          className={cn(
-            'absolute top-4 right-4 px-2 py-0.5 rounded-pill text-[11px] font-semibold',
-            deltaPositive ? 'bg-success-light text-success' : 'bg-error-light text-error'
-          )}
-        >
-          {delta > 0 ? '+' : ''}
-          {delta}%
-        </span>
-      )}
-      <p className="text-xs text-text-sub mb-2 tracking-wide">{label}</p>
-      <p className="font-display text-[40px] lg:text-[40px] text-text-base leading-none font-bold">
+      <div className="text-sm font-semibold text-text-sub">{label}</div>
+      <div className="font-display text-3xl font-extrabold leading-none text-text-base sm:text-[34px]">
         {value}
-      </p>
-      {subtitle && <p className="text-xs text-text-muted mt-1.5">{subtitle}</p>}
+      </div>
+      {footnote && <div className="text-xs font-semibold leading-snug">{footnote}</div>}
     </div>
   );
-});
+}
+
+/**
+ * Change vs the comparison period. Uses neutral wording/colour for a decrease —
+ * a lighter week isn't a failure state — and "new" when there's no baseline.
+ */
+export function DeltaBadge({ delta, comparedTo }: { delta: number | null; comparedTo: string }) {
+  if (delta === null) {
+    return <span className="text-text-sub">Nothing to compare with yet</span>;
+  }
+  if (delta === 0) return <span className="text-text-sub">Same as {comparedTo}</span>;
+  const up = delta > 0;
+  return (
+    <span className={up ? 'text-success-text' : 'text-text-sub'}>
+      {up ? '▲' : '▼'} {Math.abs(delta)}% vs {comparedTo}
+    </span>
+  );
+}

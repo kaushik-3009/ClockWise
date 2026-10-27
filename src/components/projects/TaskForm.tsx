@@ -1,99 +1,120 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { Modal } from '@/components/ui/Modal';
-import { MAX_NAME_LENGTH, MAX_NOTE_LENGTH } from '@/lib/constants';
+import { MAX_NAME_LENGTH, MAX_NOTE_LENGTH, PRIORITY } from '@/lib/constants';
+import { cn } from '@/lib/cn';
 import type { Project, Task } from '@/types';
+
+type Priority = 'low' | 'medium' | 'high';
+
+export interface TaskFormData {
+  name: string;
+  project_id?: string;
+  priority?: Priority;
+  note?: string;
+  estimated_pomodoros?: number;
+}
 
 interface TaskFormProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: {
-    name: string;
-    project_id?: string;
-    priority?: 'low' | 'medium' | 'high';
-    note?: string;
-    estimated_pomodoros?: number;
-    is_completed?: boolean;
-  }) => void;
+  onSubmit: (data: TaskFormData) => void;
   projects: Project[];
   initialData?: Task;
+  /** Pre-selected project for new tasks. */
+  defaultProjectId?: string;
 }
 
-export function TaskForm({ open, onClose, onSubmit, projects, initialData }: TaskFormProps) {
+export function TaskForm({
+  open,
+  onClose,
+  onSubmit,
+  projects,
+  initialData,
+  defaultProjectId,
+}: TaskFormProps) {
   const [name, setName] = useState('');
-  const [projectId, setProjectId] = useState<string | undefined>(projects[0]?.id);
-  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | undefined>(undefined);
+  const [projectId, setProjectId] = useState<string>('');
+  const [priority, setPriority] = useState<Priority | undefined>(undefined);
   const [note, setNote] = useState('');
-  const [estimatedPomodoros, setEstimatedPomodoros] = useState<number | undefined>(undefined);
-  const [isCompleted, setIsCompleted] = useState(false);
+  const [estimate, setEstimate] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const ids = useId();
 
+  // Reset only when the dialog opens. (Resetting whenever `projects` changed
+  // wiped what the user was typing on every parent re-render.)
   useEffect(() => {
-    if (initialData) {
-      setName(initialData.name);
-      setProjectId(initialData.project_id);
-      setPriority(initialData.priority);
-      setNote(initialData.note ?? '');
-      setEstimatedPomodoros(initialData.estimated_pomodoros);
-      setIsCompleted(initialData.is_completed);
-    } else {
-      setName('');
-      setProjectId(projects[0]?.id);
-      setPriority(undefined);
-      setNote('');
-      setEstimatedPomodoros(undefined);
-      setIsCompleted(false);
-    }
-  }, [initialData, open, projects]);
+    if (!open) return;
+    setName(initialData?.name ?? '');
+    setProjectId(initialData ? (initialData.project_id ?? '') : (defaultProjectId ?? ''));
+    setPriority(initialData?.priority);
+    setNote(initialData?.note ?? '');
+    setEstimate(initialData?.estimated_pomodoros ? String(initialData.estimated_pomodoros) : '');
+    setError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      setError('Give your task a name.');
+      return;
+    }
+    const est = Math.round(Number(estimate));
+    // Optional fields are sent as undefined when empty; on edit that clears them.
     onSubmit({
       name: name.trim().slice(0, MAX_NAME_LENGTH),
-      project_id: projectId,
-      priority: priority,
+      project_id: projectId || undefined,
+      priority,
       note: note.trim().slice(0, MAX_NOTE_LENGTH) || undefined,
-      estimated_pomodoros:
-        estimatedPomodoros && estimatedPomodoros > 0 ? estimatedPomodoros : undefined,
-      is_completed: isCompleted,
+      estimated_pomodoros: est > 0 ? Math.min(est, 99) : undefined,
     });
-    if (!initialData) {
-      setName('');
-      setProjectId(projects[0]?.id);
-      setPriority(undefined);
-      setNote('');
-      setEstimatedPomodoros(undefined);
-      setIsCompleted(false);
-    }
     onClose();
   };
 
-  const priorityOptions: { value: 'low' | 'medium' | 'high'; label: string; color: string }[] = [
-    { value: 'low', label: 'Low', color: 'bg-blue-500' },
-    { value: 'medium', label: 'Medium', color: 'bg-orange-500' },
-    { value: 'high', label: 'High', color: 'bg-red-500' },
-  ];
+  const choice = (selected: boolean) =>
+    cn(
+      'flex h-11 flex-1 items-center justify-center gap-1.5 rounded-md border text-sm font-medium transition-colors',
+      selected
+        ? 'border-brand bg-brand-alpha text-brand-text'
+        : 'border-border-input text-text-sub hover:bg-bg-secondary hover:text-text-base'
+    );
 
   return (
-    <Modal open={open} onClose={onClose} title={initialData ? 'Edit Task' : 'Create Task'}>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <div>
-          <label className="block text-sm text-text-sub mb-1.5">Name</label>
+    <Modal open={open} onClose={onClose} title={initialData ? 'Edit task' : 'New task'}>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={`${ids}-name`} className="text-sm text-text-sub">
+            Name
+          </label>
           <input
+            id={`${ids}-name`}
             value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Task name"
+            onChange={(e) => {
+              setName(e.target.value);
+              setError(null);
+            }}
             maxLength={MAX_NAME_LENGTH}
-            className="w-full h-11 px-3.5 rounded-md border border-border-base bg-bg-secondary text-text-base text-sm outline-none focus:border-brand transition-colors"
             autoFocus
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? `${ids}-err` : undefined}
+            className="field"
           />
+          {error && (
+            <p id={`${ids}-err`} className="text-xs text-error-text">
+              {error}
+            </p>
+          )}
         </div>
 
-        <div>
-          <label className="block text-sm text-text-sub mb-1.5">Project</label>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={`${ids}-project`} className="text-sm text-text-sub">
+            Project
+          </label>
           <select
-            value={projectId ?? ''}
-            onChange={(e) => setProjectId(e.target.value || undefined)}
-            className="w-full h-11 px-3.5 rounded-md border border-border-base bg-bg-secondary text-text-base text-sm outline-none focus:border-brand transition-colors"
+            id={`${ids}-project`}
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+            className="field"
           >
             <option value="">No project</option>
             {projects.map((p) => (
@@ -104,92 +125,64 @@ export function TaskForm({ open, onClose, onSubmit, projects, initialData }: Tas
           </select>
         </div>
 
-        <div>
-          <label className="block text-sm text-text-sub mb-1.5">Priority</label>
-          <div className="flex gap-2">
+        <fieldset>
+          <legend className="mb-1.5 text-sm text-text-sub">Priority</legend>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <button
               type="button"
+              aria-pressed={!priority}
               onClick={() => setPriority(undefined)}
-              className={`flex-1 h-10 rounded-md border text-sm font-medium transition-colors ${
-                !priority
-                  ? 'border-brand bg-brand-alpha text-brand'
-                  : 'border-border-base text-text-sub hover:text-text-base hover:bg-bg-secondary'
-              }`}
+              className={choice(!priority)}
             >
               None
             </button>
-            {priorityOptions.map((opt) => (
+            {(['low', 'medium', 'high'] as const).map((p) => (
               <button
-                key={opt.value}
+                key={p}
                 type="button"
-                onClick={() => setPriority(opt.value)}
-                className={`flex-1 h-10 rounded-md border text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
-                  priority === opt.value
-                    ? 'border-brand bg-brand-alpha text-brand'
-                    : 'border-border-base text-text-sub hover:text-text-base hover:bg-bg-secondary'
-                }`}
+                aria-pressed={priority === p}
+                onClick={() => setPriority(p)}
+                className={choice(priority === p)}
               >
-                <span className={`w-2 h-2 rounded-full ${opt.color}`} />
-                {opt.label}
+                <span className={cn('h-2 w-2 rounded-full', PRIORITY[p].dot)} aria-hidden="true" />
+                {p[0].toUpperCase() + p.slice(1)}
               </button>
             ))}
           </div>
-        </div>
+        </fieldset>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm text-text-sub mb-1.5">Est. Pomodoros</label>
-            <input
-              type="number"
-              min={0}
-              max={50}
-              value={estimatedPomodoros ?? ''}
-              onChange={(e) => {
-                const val = e.target.value;
-                setEstimatedPomodoros(val ? Number(val) : undefined);
-              }}
-              placeholder="0"
-              className="w-full h-11 px-3.5 rounded-md border border-border-base bg-bg-secondary text-text-base text-sm outline-none focus:border-brand transition-colors"
-            />
-          </div>
-        </div>
-
-        {initialData && (
-          <div className="flex items-center justify-between py-2">
-            <span className="text-sm text-text-base">Completed</span>
-            <button
-              type="button"
-              onClick={() => setIsCompleted(!isCompleted)}
-              className={`relative w-11 h-6 rounded-full transition-colors duration-fast ${
-                isCompleted ? 'bg-brand' : 'bg-bg-tertiary'
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-fast ${
-                  isCompleted ? 'translate-x-5' : 'translate-x-0'
-                }`}
-              />
-            </button>
-          </div>
-        )}
-
-        <div>
-          <label className="block text-sm text-text-sub mb-1.5">Note</label>
-          <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Add details about this task..."
-            rows={3}
-            maxLength={MAX_NOTE_LENGTH}
-            className="w-full px-3.5 py-2.5 rounded-md border border-border-base bg-bg-secondary text-text-base text-sm outline-none focus:border-brand transition-colors resize-none"
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={`${ids}-est`} className="text-sm text-text-sub">
+            Estimated pomodoros <span className="text-text-muted">(optional)</span>
+          </label>
+          <input
+            id={`${ids}-est`}
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={99}
+            value={estimate}
+            onChange={(e) => setEstimate(e.target.value)}
+            className="field max-w-[160px]"
           />
         </div>
 
-        <button
-          type="submit"
-          className="w-full h-11 bg-brand hover:bg-brand-hover text-white font-semibold text-sm rounded-md transition-colors duration-fast mt-1"
-        >
-          {initialData ? 'Save Changes' : 'Create Task'}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={`${ids}-note`} className="text-sm text-text-sub">
+            Note <span className="text-text-muted">(optional)</span>
+          </label>
+          <textarea
+            id={`${ids}-note`}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={3}
+            maxLength={MAX_NOTE_LENGTH}
+            className="field resize-none"
+          />
+        </div>
+
+        <button type="submit" className="btn-primary mt-1 h-12 w-full">
+          {initialData ? 'Save changes' : 'Create task'}
         </button>
       </form>
     </Modal>

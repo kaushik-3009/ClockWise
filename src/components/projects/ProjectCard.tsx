@@ -1,7 +1,9 @@
 import { memo } from 'react';
-import { Play, Trash2, ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Play, Trash2, Archive, ArchiveRestore, ListChecks } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { PROJECT_COLORS } from '@/lib/constants';
+import { formatDate, formatDuration } from '@/lib/time';
 import type { Project } from '@/types';
 
 interface ProjectCardProps {
@@ -10,9 +12,13 @@ interface ProjectCardProps {
   taskCount?: number;
   onPlay?: () => void;
   onDelete?: () => void;
-  onClick?: () => void;
+  onArchive?: () => void;
+  onRestore?: () => void;
   className?: string;
 }
+
+const action =
+  'relative z-10 flex h-11 w-11 items-center justify-center rounded-full text-text-sub transition-colors';
 
 export const ProjectCard = memo(function ProjectCard({
   project,
@@ -20,89 +26,91 @@ export const ProjectCard = memo(function ProjectCard({
   taskCount = 0,
   onPlay,
   onDelete,
-  onClick,
+  onArchive,
+  onRestore,
   className,
 }: ProjectCardProps) {
   const color = PROJECT_COLORS[project.color];
-  const formattedTime =
-    totalFocusSeconds > 0
-      ? `${String(Math.floor(totalFocusSeconds / 3600)).padStart(2, '0')}:${String(Math.floor((totalFocusSeconds % 3600) / 60)).padStart(2, '0')}:${String(totalFocusSeconds % 60).padStart(2, '0')}`
-      : '00:00:00';
 
   return (
-    <div
-      onClick={onClick}
+    <article
       className={cn(
-        'flex flex-col gap-2 p-4 bg-bg-card border border-border-base rounded-lg cursor-pointer',
-        'transition-all duration-fast hover:-translate-y-0.5',
+        'relative flex flex-col gap-2 rounded-lg border border-border-base bg-bg-card p-4 transition-all duration-fast hover:-translate-y-0.5 hover:shadow-card',
         className
       )}
-      style={{ '--project-color': color } as React.CSSProperties}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-          <span className="font-semibold text-[15px] text-text-base truncate">{project.name}</span>
-        </div>
-        <span className="text-xs text-text-muted shrink-0">≡ {taskCount}</span>
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="flex min-w-0 items-center gap-2">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+          {/* The title link stretches over the whole card (see ::after). */}
+          <Link
+            to={`/projects/${project.id}`}
+            className="truncate text-base font-semibold text-text-base after:absolute after:inset-0 after:rounded-lg after:content-['']"
+          >
+            {project.name}
+          </Link>
+        </h3>
+        <span className="flex shrink-0 items-center gap-1 text-xs text-text-sub">
+          <ListChecks className="h-3.5 w-3.5" aria-hidden="true" />
+          {taskCount} {taskCount === 1 ? 'task' : 'tasks'}
+        </span>
       </div>
 
-      {/* Description */}
       {project.description && (
-        <p className="text-[13px] text-text-sub leading-snug line-clamp-2">{project.description}</p>
+        <p className="line-clamp-2 text-sm leading-snug text-text-sub">{project.description}</p>
       )}
 
-      {/* Date */}
-      <span className="text-xs text-text-muted">
-        {new Date(project.created_at).toLocaleDateString()}
-      </span>
+      <span className="text-xs text-text-muted">Created {formatDate(project.created_at)}</span>
 
-      {/* Footer */}
-      <div className="flex items-center justify-between mt-auto pt-1">
-        <span className="font-mono text-sm" style={{ color }}>
-          {formattedTime}
+      <div className="mt-auto flex items-center justify-between pt-1">
+        <span className="text-sm font-semibold text-text-base">
+          {totalFocusSeconds > 0
+            ? `${formatDuration(totalFocusSeconds)} focused`
+            : 'No focus time yet'}
         </span>
-        <div className="flex items-center gap-1">
-          {onDelete && (
+        <div className="-mr-1.5 flex items-center">
+          {onArchive && (
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-text-sub hover:text-error hover:bg-error/10 transition-colors"
-              aria-label="Delete project"
+              type="button"
+              onClick={onArchive}
+              className={cn(action, 'hover:bg-bg-secondary hover:text-text-base')}
+              aria-label={`Archive ${project.name}`}
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              <Archive className="h-4 w-4" />
             </button>
           )}
-          {onClick && (
+          {onRestore && (
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onClick();
-              }}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-text-sub hover:text-brand hover:bg-brand-alpha transition-colors"
-              aria-label="View project"
+              type="button"
+              onClick={onRestore}
+              className={cn(action, 'hover:bg-bg-secondary hover:text-text-base')}
+              aria-label={`Restore ${project.name}`}
             >
-              <ArrowRight className="w-3.5 h-3.5" />
+              <ArchiveRestore className="h-4 w-4" />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              className={cn(action, 'hover:bg-error-light hover:text-error-text')}
+              aria-label={`Delete ${project.name}`}
+            >
+              <Trash2 className="h-4 w-4" />
             </button>
           )}
           {onPlay && (
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onPlay();
-              }}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white"
-              style={{ backgroundColor: color }}
-              aria-label="Start focus"
+              type="button"
+              onClick={onPlay}
+              className="relative z-10 ml-1 flex h-11 w-11 items-center justify-center rounded-full bg-brand-solid text-white hover:opacity-90"
+              aria-label={`Focus on ${project.name}`}
             >
-              <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+              <Play className="ml-0.5 h-4 w-4 fill-current" />
             </button>
           )}
         </div>
       </div>
-    </div>
+    </article>
   );
 });

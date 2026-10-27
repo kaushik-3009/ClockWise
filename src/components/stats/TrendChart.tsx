@@ -20,17 +20,16 @@ export function TrendChart({ data, className }: TrendChartProps) {
   const tickColor = 'var(--text-muted)';
   const gridColor = 'var(--border-color)';
 
+  // Hours with one decimal above an hour, so ticks never repeat ("1h", "1h").
   const formatY = (v: number) => {
     if (v === 0) return '0';
-    const h = Math.floor(v / 3600);
-    const m = Math.floor((v % 3600) / 60);
-    if (h > 0) return `${h}h`;
-    return `${m}m`;
+    if (v >= 3600) return `${+(v / 3600).toFixed(1)}h`;
+    return `${Math.round(v / 60)}m`;
   };
 
   return (
     <div className={cn('bg-bg-card border border-border-base rounded-md p-5 px-6', className)}>
-      <h3 className="text-[15px] font-semibold text-text-base">30-Day Trend</h3>
+      <h3 className="text-md font-semibold text-text-base">Last 30 days</h3>
       <p className="text-xs text-text-sub mt-0.5 mb-4">Focus time over the last 30 days</p>
       <ResponsiveContainer width="100%" height={220}>
         <AreaChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>

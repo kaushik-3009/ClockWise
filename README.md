@@ -29,7 +29,7 @@ It started as a local-only app for personal use. Then I figured if I was buildin
 |---|---|
 | Frontend | React 18, TypeScript (strict), React Router |
 | State | Zustand (with per-field selectors) |
-| Timer | Web Worker (`timer.worker.ts`) |
+| Timer | Wall-clock engine in a Zustand store, persisted to `localStorage` |
 | Backend / Auth | Firebase Auth + Firestore |
 | Build | Vite |
 | Testing | Vitest |
@@ -39,15 +39,15 @@ It started as a local-only app for personal use. Then I figured if I was buildin
 
 ## Features
 
-- **Timer** -- configurable focus/break phases, three display modes (digital, analog, clock), keyboard shortcuts (`Space`, `R`, `S`, `Esc`)
-- **Projects & tasks** -- color-coded projects with tasks, creatable inline from the *"I'm focusing on..."* picker without leaving the timer; switch context mid-session without losing progress
-- **Analytics** -- heatmaps, trend charts, session breakdowns, weekday and time-of-day analysis
-- **Streaks** -- daily goals, streak counting, consistency scoring
-- **Templates** -- saved timer configurations (Classic Pomodoro, Deep Work, Quick Sprint)
-- **Focus music player** -- a bottom-docked lofi and ambient player with station controls, volume, soundscape presets, and a subtle animated rhythm indicator
-- **Ambient sound** -- looping audio (rain, white noise, brown noise, cafe) plus synthesized UI sound effects
-- **Sync & offline** -- Firebase email/password auth, per-user Firestore data, offline persistence, installable PWA
-- **Export** -- JSON and CSV, with automatic backup snapshots on every session completion
+- **Timer** -- configurable focus/break phases, three faces (digital, dial, clock), keyboard shortcuts (`Space`, `R`, `S`, `Esc`, can be turned off). Keeps correct time when the phone locks, the app is backgrounded or killed, and across open tabs
+- **Projects & tasks** -- color-coded projects with tasks you can tick off, creatable inline from the *"I'm focusing on..."* picker; archive and restore projects
+- **History** -- every phase logged automatically, editable, plus manual time entry ("Log time")
+- **Analytics** -- statistics with like-for-like comparisons ("this week so far vs the same point last week"), insights on weekday and time-of-day patterns, a heatmap, streaks and a weekly goal
+- **Templates** -- saved timer setups (Classic Pomodoro, Deep Work, Quick Sprint, Study Session, or your own)
+- **Sound** -- lofi radio stations plus synthesized rain, café, white and brown noise (Web Audio, no files), and synthesized UI chimes
+- **Installable PWA** -- iPhone safe areas, splash screens, update prompt, Wake Lock to keep the screen on while focusing, notifications via the service worker
+- **Sync & offline** -- Firebase email/password auth, per-user Firestore data with offline persistence
+- **Export / import** -- JSON backup (round-trips) and CSV with project and task names
 
 ---
 
@@ -75,11 +75,25 @@ cp .env.example .env.local   # add your Firebase project config
 npm run dev                  # start the dev server at localhost:5173
 ```
 
+#### Without a Firebase project (local emulators)
+
+Requires Java 11+. Any values in `.env.local` work, e.g. `VITE_FIREBASE_PROJECT_ID=demo-clockwise`.
+
+```bash
+npm run emulators   # Auth + Firestore emulators, enforcing firestore.rules
+npm run dev:local   # dev server connected to the emulators
+```
+
+#### Deploying
+
+Hosting is configured for Vercel (`vercel.json`: SPA rewrites, cache headers, CSP). Deploy Firestore rules with `npx firebase deploy --only firestore`.
+
 ### Commands
 
 | Command | Description |
 |---|---|
 | `npm run dev` | Vite dev server |
+| `npm run emulators` / `npm run dev:local` | Local Firebase emulators + dev server wired to them |
 | `npm run build` | Type-check + production build |
 | `npm test` | Run tests (Vitest) |
 | `npm run test:watch` | Watch mode |
@@ -90,15 +104,15 @@ npm run dev                  # start the dev server at localhost:5173
 
 ### Notable Design Decisions
 
-- **Timer runs in a Web Worker** -- background-tab throttling can't cause drift, and heavy chart re-renders can't stall it. No `setInterval` on the main thread.
-- **Firestore instead of a custom backend** -- per-user subcollections get auth-scoped security rules and live sync for free; `persistentMultipleTabManager` keeps offline writes consistent across tabs.
-- **Generation counter, not a boolean cancel flag** -- a plain `cancelledRef` can't distinguish "this run was cancelled" from "a newer run replaced it," which caused rapid reset->play->reset to leave orphaned session documents. A monotonically increasing counter fixes that.
-- **Zustand with selectors** -- the timer ticks every second; `useStore(s => s.field)` keeps components that don't care about the tick from re-rendering on every tick.
-- **Real audio files for ambient loops, synthesized Web Audio for UI sounds** -- looping rain/cafe/noise sounds better as authored audio; short one-shot clicks/chimes are synthesized through a single shared `AudioContext` and need no audio files.
-- **Recharts with custom HTML tooltips** -- Recharts' default tooltip text inherits the bar's fill color, which makes it invisible in light mode. Custom tooltip components fix that. Chart colors are detected in JS with hex fallbacks because CSS variables don't resolve inside inline SVG.
-- **Type guards for import validation** -- every field of every entity is checked for type, range, and enum membership; no schema library dependency.
-- **Music playback stays isolated from the timer** -- YouTube station playback is initialized on demand, while ambient sound uses the existing Web Audio path; the timer continues to run in its worker independently.
-- **PWA install assets** -- the manifest uses dedicated 192px, 512px, Apple touch, and maskable icons so installed launches and platform splash screens have a proper ClockWise mark instead of a blank placeholder.
+- **Wall-clock timer, not tick counting** -- the store keeps `running_since` + accumulated time and derives the remaining time from `Date.now()`. iOS freezes JavaScript in a backgrounded or locked PWA; on resume one `tick()` completes (and with auto-start chains) every phase that ended in the meantime, at the exact time it ended.
+- **Pure store, effects outside** -- timer actions take `now` and return their effects (phases to record, sounds); `lib/timerController.ts` applies them. That makes the store testable with fake timestamps.
+- **One engine for the whole app** -- `TimerEngine` lives in the app shell, so navigating away from the timer never stops it. A worker heartbeat keeps desktop background tabs on time; `visibilitychange`/`pageshow` re-sync on mobile.
+- **Write sessions once, never wait on the network** -- a phase is written when it ends, fire-and-forget with a deterministic id (so several tabs finishing the same phase write one document). Firestore write promises only resolve on server ack, so nothing in the UI awaits them; failures surface as toasts.
+- **One data provider** -- a single set of Firestore listeners shared by every page; sessions are loaded for a ~13-month window (History can load older). Every document is parsed at runtime (`db/parse.ts`) instead of cast.
+- **Validated security rules** -- rules check ownership *and* field types, sizes and enums, mirroring the client-side parser.
+- **Deleting keeps history** -- deleting a project or task never deletes its logged sessions.
+- **Consistent definitions** -- focus time counts every focus session (finished or not); "sessions" are focus sessions; a day is active with at least a minute of focus. Used everywhere via `lib/stats.ts`.
+- **Updates on your terms** -- the service worker uses the prompt strategy, so a deploy never swaps code under a running session; stale lazy chunks trigger a single reload.
 
 ---
 
@@ -107,27 +121,26 @@ npm run dev                  # start the dev server at localhost:5173
 ```
 src/
   components/
-    ui/           Modal, Toast, ConfirmDialog, SettingsModal, ErrorBoundary
-    layout/       AppShell, Sidebar, BottomNav, OfflineBanner
-    auth/         ProtectedRoute
-    timer/        TimerDisplay, TimerControls, PhaseBadge, FocusingOnBar, TaskPicker, TemplateSelector
+    ui/           Modal (portal, bottom sheet on phones), Toast, ConfirmDialog, Switch, ErrorBoundary
+    layout/       AppShell, Sidebar, BottomNav (with live mini timer), OfflineBanner
+    auth/         ProtectedRoute, AuthLayout
+    brand/        Logo
+    timer/        TimerEngine, TimerDisplay, TimerControls, PhaseBadge, TaskPicker, TemplateSelector, MusicPlayer
     projects/     ProjectCard, TaskRow, ProjectForm, TaskForm
-    stats/        HeatmapCalendar, FocusTimeChart, SessionsChart, TrendChart, StatCard
-    insights/     DaytimeChart, WeekdayChart, FocusDistribution
-  hooks/          useTimer, useProjects, useTasks, useSessions, useSettings, useTemplates, useOnlineStatus
-  stores/         timerStore, uiStore (Zustand)
-  db/queries/     Firestore reads/writes, one file per collection
-  workers/        timer.worker.ts
-  lib/            firebase.ts, auth.tsx, stats.ts, sounds.ts, ambient.ts, streaks.ts, exportImport.ts
-  pages/          Timer, Login, Signup, Statistics, Projects, ProjectDetail, Tasks, History, Streaks, Insights, Templates
-public/sounds/    Ambient audio files
+    stats/        HeatmapCalendar, charts, PeriodHeader, StatCard
+  hooks/          useData + useProjects/useTasks/useSessions/useSettings/useTemplates, useTimerShortcuts, usePageTitle
+  stores/         timerStore, uiStore, lofiStore (Zustand)
+  db/             parse.ts (runtime validation), clean.ts, seed.ts, queries/
+  workers/        timer.worker.ts (heartbeat)
+  lib/            firebase, auth, data provider, timerController, stats, streaks, period, ambient, sounds, exportImport
+  pages/          Landing, Login, Signup, Timer, Projects, ProjectDetail, History, Statistics, Insights, Streaks, Templates, Settings
 ```
 
 ---
 
 ## Testing
 
-50 tests across 6 files covering core logic: `time.ts`, `phases.ts`, `stats.ts`, `streaks.ts`, `exportImport.ts`, `timerStore.ts`.
+Unit tests cover the timer store (wall-clock catch-up after suspension, session lifecycle, mid-session settings changes), stats and streak maths (including DST and in-progress periods), phases, and export/import validation.
 
 ```bash
 npm test             # run once
@@ -138,7 +151,7 @@ npm run test:watch   # watch mode
 
 ## Data & Sync
 
-Everything lives under `users/{uid}/` in Firestore -- private by default, available on any signed-in device. Firestore's persistent local cache keeps the app working offline; writes queue and sync when you reconnect (an offline banner makes the state visible). Sessions trigger automatic backup snapshots; manual JSON/CSV export is always available.
+Everything lives under `users/{uid}/` in Firestore -- private by default, available on any signed-in device. Firestore's persistent local cache keeps the app working offline; writes queue and sync when you reconnect (an offline banner makes the state visible). Signing out clears the timer and the on-device cache. JSON/CSV export and JSON import are in Settings.
 
 ---
 

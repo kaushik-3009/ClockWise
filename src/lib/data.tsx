@@ -19,6 +19,7 @@ import {
   parseTemplate,
 } from '@/db/parse';
 import { DEFAULT_SETTINGS } from '@/db/queries/settings';
+import { seedDefaultsOnly } from '@/db/seed';
 import { useTimerStore } from '@/stores/timerStore';
 import { toast } from '@/components/ui/Toast';
 import type { Project, Session, Task, TimerSettings, TimerTemplate } from '@/types';
@@ -142,6 +143,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       onSnapshot(
         doc(db, 'users', uid, 'settings', 'default'),
         (snap) => {
+          // A missing settings doc on the server means first-time setup never
+          // finished (e.g. the signup page was closed mid-seed). Create defaults.
+          if (!snap.exists() && !snap.metadata.fromCache) {
+            seedDefaultsOnly(uid).catch((err) =>
+              console.error('[data] Default setup failed:', err)
+            );
+          }
           const next = normalizeSettings(snap.data());
           setSettings(next);
           useTimerStore.getState().setSettings(next);

@@ -1,64 +1,170 @@
 rules_version = '2';
 
+// Every document lives under /users/{uid}/... and only that user can touch it.
+// Beyond ownership, writes are validated so a buggy or malicious client can't
+// store oversized strings, impossible numbers or forged ownership fields.
 service cloud.firestore {
   match /databases/{database}/documents {
     function isOwner(userId) {
       return request.auth != null && request.auth.uid == userId;
     }
 
-    function ownsEntity(userId) {
-      return isOwner(userId) && request.resource.data.user_id == userId;
+    function data() {
+      return request.resource.data;
     }
 
-    function ownsExistingEntity(userId) {
-      return isOwner(userId) && resource.data.user_id == userId;
+    // Only these keys may appear in the document.
+    function onlyKeys(keys) {
+      return data().keys().hasOnly(keys);
     }
 
-    // Users can only read/write their own user document and subcollections.
+    function str(field, maxLen) {
+      return data()[field] is string && data()[field].size() <= maxLen;
+    }
+
+    function optStr(field, maxLen) {
+      return !(field in data()) || str(field, maxLen);
+    }
+
+    function intIn(field, lo, hi) {
+      return data()[field] is int && data()[field] >= lo && data()[field] <= hi;
+    }
+
+    function numIn(field, lo, hi) {
+      return (data()[field] is int || data()[field] is float)
+        && data()[field] >= lo && data()[field] <= hi;
+    }
+
+    // Plausible epoch-ms timestamp: after 2000 and not more than a day in the future.
+    function timestamp(field) {
+      return data()[field] is int
+        && data()[field] > 946684800000
+        && data()[field] < request.time.toMillis() + 86400000;
+    }
+
+    function ownedBy(userId) {
+      return data().user_id == userId;
+    }
+
+    // created_at can't be rewritten after the fact.
+    function createdAtUnchanged() {
+      return data().created_at == resource.data.created_at;
+    }
+
+    function validProject(userId) {
+      return ownedBy(userId)
+        && onlyKeys(['id', 'user_id', 'name', 'description', 'color', 'status', 'created_at'])
+        && str('name', 120) && data().name.size() > 0
+        && optStr('description', 250)
+        && data().color in ['blue', 'teal', 'green', 'purple', 'orange', 'red', 'yellow', 'slate']
+        && data().status in ['active', 'archived']
+        && timestamp('created_at');
+    }
+
+    function validTask(userId) {
+      return ownedBy(userId)
+        && onlyKeys(['id', 'user_id', 'project_id', 'name', 'is_completed', 'created_at',
+                     'priority', 'note', 'estimated_pomodoros'])
+        && str('name', 120) && data().name.size() > 0
+        && optStr('project_id', 128)
+        && data().is_completed is bool
+        && timestamp('created_at')
+        && (!('priority' in data()) || data().priority in ['low', 'medium', 'high'])
+        && optStr('note', 500)
+        && (!('estimated_pomodoros' in data()) || intIn('estimated_pomodoros', 1, 99));
+    }
+
+    function validSession(userId) {
+      return ownedBy(userId)
+        && onlyKeys(['id', 'user_id', 'project_id', 'task_id', 'type', 'started_at', 'ended_at',
+                     'duration_seconds', 'phase_number', 'completed', 'note'])
+        && optStr('project_id', 128)
+        && optStr('task_id', 128)
+        && data().type in ['focus', 'short_break', 'long_break']
+        && timestamp('started_at')
+        && (!('ended_at' in data()) || (timestamp('ended_at') && data().ended_at >= data().started_at))
+        && intIn('duration_seconds', 0, 86400)
+        && intIn('phase_number', 1, 100)
+        && data().completed is bool
+        && optStr('note', 500);
+    }
+
+    function validTemplate(userId) {
+      return ownedBy(userId)
+        && onlyKeys(['id', 'user_id', 'name', 'focus_minutes', 'short_break_minutes',
+                     'long_break_minutes', 'phases_per_session', 'long_break_after_n', 'created_at'])
+        && str('name', 120) && data().name.size() > 0
+        && intIn('focus_minutes', 1, 180)
+        && intIn('short_break_minutes', 1, 60)
+        && intIn('long_break_minutes', 1, 120)
+        && intIn('phases_per_session', 1, 24)
+        && intIn('long_break_after_n', 1, 12)
+        && data().created_at is int;
+    }
+
+    function validSettings() {
+      return onlyKeys(['focus_minutes', 'short_break_minutes', 'long_break_minutes',
+                       'phases_per_session', 'long_break_after_n', 'auto_start', 'sound_enabled',
+                       'notifications_enabled', 'keep_screen_awake', 'keyboard_shortcuts',
+                       'timer_style', 'accent_color', 'ambient_sound', 'ambient_volume',
+                       'weekly_goal_hours', 'warn_before_seconds'])
+        && intIn('focus_minutes', 1, 180)
+        && intIn('short_break_minutes', 1, 60)
+        && intIn('long_break_minutes', 1, 120)
+        && intIn('phases_per_session', 1, 24)
+        && intIn('long_break_after_n', 1, 12)
+        && data().auto_start is bool
+        && data().sound_enabled is bool
+        && data().notifications_enabled is bool
+        && (!('keep_screen_awake' in data()) || data().keep_screen_awake is bool)
+        && (!('keyboard_shortcuts' in data()) || data().keyboard_shortcuts is bool)
+        && data().timer_style in ['digital', 'clock_numeric', 'analog']
+        && data().accent_color is string && data().accent_color.matches('^#[0-9a-fA-F]{6}$')
+        && data().ambient_sound in ['off', 'rain', 'white', 'brown', 'cafe']
+        && numIn('ambient_volume', 0, 1)
+        && numIn('weekly_goal_hours', 0, 168)
+        && intIn('warn_before_seconds', 0, 600);
+    }
+
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      // The root doc holds nothing today; allow reading and deleting it only.
+      allow read, delete: if isOwner(userId);
 
       match /projects/{projectId} {
-        allow read: if isOwner(userId);
-        allow create: if ownsEntity(userId);
-        allow update: if ownsExistingEntity(userId) && ownsEntity(userId);
-        allow delete: if ownsExistingEntity(userId);
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId) && validProject(userId) && data().id == projectId;
+        allow update: if isOwner(userId) && validProject(userId) && createdAtUnchanged();
       }
 
       match /tasks/{taskId} {
-        allow read: if isOwner(userId);
-        allow create: if ownsEntity(userId);
-        allow update: if ownsExistingEntity(userId) && ownsEntity(userId);
-        allow delete: if ownsExistingEntity(userId);
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId) && validTask(userId) && data().id == taskId;
+        allow update: if isOwner(userId) && validTask(userId) && createdAtUnchanged();
       }
 
       match /sessions/{sessionId} {
-        allow read: if isOwner(userId);
-        allow create: if ownsEntity(userId);
-        allow update: if ownsExistingEntity(userId) && ownsEntity(userId);
-        allow delete: if ownsExistingEntity(userId);
-      }
-
-      match /streaks/{date} {
-        allow read: if isOwner(userId);
-        allow create: if ownsEntity(userId);
-        allow update: if ownsExistingEntity(userId) && ownsEntity(userId);
-        allow delete: if ownsExistingEntity(userId);
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId) && validSession(userId) && data().id == sessionId;
+        allow update: if isOwner(userId) && validSession(userId);
       }
 
       match /templates/{templateId} {
-        allow read: if isOwner(userId);
-        allow create: if ownsEntity(userId);
-        allow update: if ownsExistingEntity(userId) && ownsEntity(userId);
-        allow delete: if ownsExistingEntity(userId);
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId) && validTemplate(userId) && data().id == templateId;
+        allow update: if isOwner(userId) && validTemplate(userId) && createdAtUnchanged();
       }
 
       match /settings/{settingsId} {
-        allow read, write: if isOwner(userId);
+        allow read, delete: if isOwner(userId);
+        allow write: if isOwner(userId) && settingsId == 'default' && validSettings();
       }
 
-      match /backups/{backupId} {
-        allow read, write: if isOwner(userId);
+      // Legacy collections from older versions: readable and deletable only.
+      match /streaks/{doc} {
+        allow read, delete: if isOwner(userId);
+      }
+      match /backups/{doc} {
+        allow read, delete: if isOwner(userId);
       }
     }
   }

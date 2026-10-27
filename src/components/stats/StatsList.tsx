@@ -24,8 +24,8 @@ export function StatsList({ rows, className }: StatsListProps) {
               i !== rows.length - 1 && 'border-b border-border-base'
             )}
           >
-            <span className="text-[13px] font-bold text-text-sub">{row.label}</span>
-            <span className="text-[15px] font-bold text-text-base tabular-nums">{row.value}</span>
+            <span className="text-sm font-bold text-text-sub">{row.label}</span>
+            <span className="text-md font-bold text-text-base tabular-nums">{row.value}</span>
           </div>
         ))}
       </div>

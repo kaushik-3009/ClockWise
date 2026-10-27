@@ -39,12 +39,14 @@ export async function getSessionsInRange(
 
 export function createSession(
   userId: string,
-  data: Omit<Session, 'id' | 'user_id'>
+  data: Omit<Session, 'id' | 'user_id'>,
+  /** Pass a deterministic id to make the write idempotent (e.g. from several tabs). */
+  id: string = crypto.randomUUID()
 ): { session: Session; written: Promise<void> } {
   const session: Session = stripUndefined({
     ...data,
     user_id: userId,
-    id: crypto.randomUUID(),
+    id,
   });
   return { session, written: setDoc(sessionRef(userId, session.id), session) };
 }

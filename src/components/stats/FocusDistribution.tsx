@@ -27,7 +27,7 @@ export function FocusDistribution({
       <div className={cn('bg-bg-card border border-border-base rounded-lg p-5', className)}>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-[15px] font-semibold text-text-base">Focus distribution</h2>
+            <h2 className="text-md font-semibold text-text-base">Focus distribution</h2>
             <p className="text-sm text-text-sub mt-0.5">Ranked by time</p>
           </div>
         </div>
@@ -42,7 +42,7 @@ export function FocusDistribution({
     <div className={cn('bg-bg-card border border-border-base rounded-lg p-5', className)}>
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h2 className="text-[15px] font-semibold text-text-base">Focus distribution</h2>
+          <h2 className="text-md font-semibold text-text-base">Focus distribution</h2>
           <p className="text-sm text-text-sub mt-0.5">Ranked by time</p>
         </div>
       </div>

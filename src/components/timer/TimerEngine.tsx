@@ -52,6 +52,13 @@ export function TimerEngine() {
     }
 
     const resync = () => timerTick();
+    // Keep several open tabs in step: when another tab changes the timer, reload it here.
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === useTimerStore.persist.getOptions().name) {
+        void Promise.resolve(useTimerStore.persist.rehydrate()).then(() => timerTick());
+      }
+    };
+    window.addEventListener('storage', onStorage);
     document.addEventListener('visibilitychange', resync);
     window.addEventListener('focus', resync);
     window.addEventListener('pageshow', resync);
@@ -61,6 +68,7 @@ export function TimerEngine() {
       worker?.terminate();
       if (interval !== null) window.clearInterval(interval);
       document.removeEventListener('visibilitychange', resync);
+      window.removeEventListener('storage', onStorage);
       window.removeEventListener('focus', resync);
       window.removeEventListener('pageshow', resync);
       removeUnlock();

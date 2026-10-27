@@ -54,8 +54,8 @@ export function parseProject(id: string, data: unknown): Project | null {
   return {
     id,
     user_id: str(data.user_id) ?? '',
-    name,
-    description: str(data.description) || undefined,
+    name: name.slice(0, 120),
+    description: str(data.description)?.slice(0, 250) || undefined,
     color: color && PROJECT_COLOR_KEYS.includes(color) ? color : 'blue',
     status: data.status === 'archived' ? 'archived' : 'active',
     created_at: num(data.created_at) ?? 0,
@@ -72,13 +72,13 @@ export function parseTask(id: string, data: unknown): Task | null {
     id,
     user_id: str(data.user_id) ?? '',
     project_id: str(data.project_id) || undefined,
-    name,
+    name: name.slice(0, 120),
     is_completed: bool(data.is_completed) ?? false,
     created_at: num(data.created_at) ?? 0,
     priority:
       priority === 'low' || priority === 'medium' || priority === 'high' ? priority : undefined,
-    note: str(data.note) || undefined,
-    estimated_pomodoros: estimate && estimate > 0 ? Math.round(estimate) : undefined,
+    note: str(data.note)?.slice(0, 500) || undefined,
+    estimated_pomodoros: estimate && estimate > 0 ? Math.min(99, Math.round(estimate)) : undefined,
   };
 }
 
@@ -96,10 +96,10 @@ export function parseSession(id: string, data: unknown): Session | null {
     type,
     started_at,
     ended_at: ended_at !== undefined && ended_at >= started_at ? ended_at : undefined,
-    duration_seconds: Math.max(0, Math.round(num(data.duration_seconds) ?? 0)),
-    phase_number: Math.max(1, Math.round(num(data.phase_number) ?? 1)),
+    duration_seconds: clamp(Math.round(num(data.duration_seconds) ?? 0), 0, 86_400),
+    phase_number: clamp(Math.round(num(data.phase_number) ?? 1), 1, 100),
     completed: bool(data.completed) ?? false,
-    note: str(data.note) || undefined,
+    note: str(data.note)?.slice(0, 500) || undefined,
   };
 }
 

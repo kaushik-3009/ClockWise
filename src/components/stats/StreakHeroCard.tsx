@@ -1,60 +1,57 @@
+import { Flame } from 'lucide-react';
 import { cn } from '@/lib/cn';
-
-const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-const DAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 interface StreakHeroCardProps {
   streak: number;
-  activeDays?: string[]; // e.g. ['Monday','Tuesday',...]
-  label?: string;
-  copy?: string;
+  longest: number;
+  /** Last 7 days, oldest first. */
+  lastWeek: { label: string; date: string; active: boolean; isToday: boolean }[];
   className?: string;
 }
 
-export function StreakHeroCard({
-  streak,
-  activeDays = [],
-  label = 'Live streak',
-  copy = 'A single headline metric gives the page emotional weight. It tells the user what this screen is about before they read the grid.',
-  className,
-}: StreakHeroCardProps) {
-  const padded = String(streak).padStart(2, '0');
+export function StreakHeroCard({ streak, longest, lastWeek, className }: StreakHeroCardProps) {
+  const todayDone = lastWeek[lastWeek.length - 1]?.active;
+  const message =
+    streak === 0
+      ? 'Focus for a minute or more today to start a streak.'
+      : !todayDone
+        ? 'Focus today to keep your streak going.'
+        : streak >= longest
+          ? 'This is your longest streak yet. Keep it going!'
+          : `${longest - streak + 1} more ${longest - streak + 1 === 1 ? 'day' : 'days'} to beat your record of ${longest}.`;
 
   return (
-    <div className={cn('p-5 rounded-2xl bg-brand-light border border-brand-alpha', className)}>
-      <div className="flex items-center justify-between gap-2 mb-4">
-        <span className="px-2.5 py-1.5 rounded-full bg-brand-alpha text-brand text-xs font-extrabold uppercase tracking-wide">
-          {label}
-        </span>
-        <span className="px-2.5 py-1.5 rounded-full bg-bg-card text-text-sub text-xs font-extrabold uppercase tracking-wide border border-border-base">
-          Weekdays
-        </span>
+    <section
+      aria-label="Current streak"
+      className={cn('rounded-2xl border border-brand-alpha bg-brand-light p-5', className)}
+    >
+      <div className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-brand-text">
+        <Flame className="h-4 w-4" aria-hidden="true" />
+        Current streak
       </div>
-
-      <div className="text-[56px] leading-[0.9] font-display font-black tracking-[-0.05em] text-text-base">
-        {padded}
+      <div className="font-display text-6xl font-black leading-none text-text-base">{streak}</div>
+      <div className="mb-2 mt-1 text-base font-bold text-text-base">
+        {streak === 1 ? 'day in a row' : 'days in a row'}
       </div>
-      <div className="text-base font-bold text-text-base mt-1 mb-2">Days in a row</div>
-      <p className="text-sm text-text-sub leading-relaxed mb-4">{copy}</p>
+      <p className="mb-4 text-sm leading-relaxed text-text-sub">{message}</p>
 
-      <div className="flex gap-2 flex-wrap">
-        {DAY_LABELS.map((label, i) => {
-          const isActive = activeDays.includes(DAY_FULL[i]);
-          return (
-            <span
-              key={i}
-              className={cn(
-                'min-w-[34px] text-center px-2.5 py-2 rounded-xl text-xs font-extrabold transition-colors',
-                isActive
-                  ? 'bg-brand text-white shadow-[0_4px_12px_var(--color-brand-alpha)]'
-                  : 'bg-bg-tertiary text-text-muted'
-              )}
-            >
-              {label}
+      <ol className="grid grid-cols-7 gap-1.5" aria-label="Last 7 days">
+        {lastWeek.map((d) => (
+          <li
+            key={d.date}
+            className={cn(
+              'flex flex-col items-center gap-1 rounded-xl py-2 text-xs font-bold',
+              d.active ? 'bg-brand-solid text-white' : 'bg-bg-tertiary text-text-sub',
+              d.isToday && 'ring-2 ring-text-base ring-offset-1 ring-offset-brand-light'
+            )}
+          >
+            <span aria-hidden="true">{d.label}</span>
+            <span className="sr-only">
+              {d.date}: {d.active ? 'focused' : 'no focus'}
             </span>
-          );
-        })}
-      </div>
-    </div>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }

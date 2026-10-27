@@ -9,11 +9,12 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { cn } from '@/lib/cn';
-import { useUiStore } from '@/stores/uiStore';
+import { useUiStore, resolveTheme } from '@/stores/uiStore';
 
 interface SessionsChartProps {
-  data: { day: string; started: number; completed: number }[];
+  data: { day: string; started: number | null; completed: number | null }[];
   highlightDay?: string;
+  subtitle?: string;
   className?: string;
 }
 
@@ -50,8 +51,8 @@ function CustomTooltip({
   );
 }
 
-export function SessionsChart({ data, highlightDay, className }: SessionsChartProps) {
-  const { theme } = useUiStore();
+export function SessionsChart({ data, highlightDay, subtitle, className }: SessionsChartProps) {
+  const theme = resolveTheme(useUiStore((s) => s.theme));
   const isDark = theme === 'dark';
   const tickColor = 'var(--text-muted)';
   const gridColor = 'var(--border-color)';
@@ -64,15 +65,15 @@ export function SessionsChart({ data, highlightDay, className }: SessionsChartPr
         className
       )}
     >
-      <h3 className="text-[15px] font-semibold text-text-base">Sessions</h3>
-      <p className="text-xs text-text-sub mt-0.5 mb-4">Started vs completed per day</p>
-      {data.length === 0 || data.every((d) => d.started === 0 && d.completed === 0) ? (
-        <div className="flex-1 flex items-center justify-center text-sm text-text-muted">
+      <h3 className="text-md font-semibold text-text-base">Focus sessions</h3>
+      <p className="text-xs text-text-sub mt-0.5 mb-4">{subtitle ?? 'Started vs finished'}</p>
+      {data.length === 0 || data.every((d) => !d.started && !d.completed) ? (
+        <div className="flex h-[220px] items-center justify-center text-sm text-text-muted">
           No session data for this period
         </div>
       ) : (
         <>
-          <div className="flex-1 min-h-0">
+          <div className="h-[220px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
@@ -97,7 +98,7 @@ export function SessionsChart({ data, highlightDay, className }: SessionsChartPr
                   dataKey="completed"
                   fill="var(--color-brand)"
                   radius={[4, 4, 0, 0]}
-                  name="Completed"
+                  name="Finished"
                 />
                 {highlightDay && (
                   <ReferenceLine
@@ -117,7 +118,7 @@ export function SessionsChart({ data, highlightDay, className }: SessionsChartPr
             </div>
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 rounded-sm bg-brand" />
-              <span className="text-sm text-text-base font-medium">Completed</span>
+              <span className="text-sm text-text-base font-medium">Finished</span>
             </div>
           </div>
         </>

@@ -1,74 +1,95 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/cn';
-
-export type Granularity = 'day' | 'week' | 'month';
+import type { Granularity } from '@/lib/period';
 
 interface PeriodHeaderProps {
   label: string;
   onPrev: () => void;
   onNext: () => void;
   onToday?: () => void;
+  /** Hide "Today" when the current period is already shown. */
+  isCurrent?: boolean;
   granularity: Granularity;
   onGranularityChange: (g: Granularity) => void;
   className?: string;
 }
+
+const OPTIONS: { value: Granularity; label: string }[] = [
+  { value: 'day', label: 'Day' },
+  { value: 'week', label: 'Week' },
+  { value: 'month', label: 'Month' },
+];
+
+const TODAY_LABEL: Record<Granularity, string> = {
+  day: 'Today',
+  week: 'This week',
+  month: 'This month',
+};
 
 export function PeriodHeader({
   label,
   onPrev,
   onNext,
   onToday,
+  isCurrent,
   granularity,
   onGranularityChange,
   className,
 }: PeriodHeaderProps) {
-  const options: { value: Granularity; label: string }[] = [
-    { value: 'day', label: 'Day' },
-    { value: 'week', label: 'Week' },
-    { value: 'month', label: 'Month' },
-  ];
-
   return (
-    <div className={cn('flex items-center justify-between mb-6', className)}>
-      <div className="flex items-center gap-3">
+    <div className={cn('mb-6 flex flex-wrap items-center justify-between gap-3', className)}>
+      <div className="flex min-w-0 items-center gap-1">
         <button
+          type="button"
           onClick={onPrev}
-          className="p-1.5 rounded-md text-text-sub hover:text-text-base hover:bg-bg-secondary transition-colors"
-          aria-label="Previous period"
+          className="flex h-11 w-11 items-center justify-center rounded-md text-text-sub transition-colors hover:bg-bg-secondary hover:text-text-base"
+          aria-label={`Previous ${granularity}`}
         >
-          <ChevronLeft className="w-5 h-5" />
+          <ChevronLeft className="h-5 w-5" />
         </button>
-        <span className="text-sm font-semibold text-text-base min-w-[140px] text-center">
+        <span
+          className="min-w-[9.5rem] text-center text-sm font-semibold text-text-base"
+          aria-live="polite"
+        >
           {label}
         </span>
-        {onToday && (
+        <button
+          type="button"
+          onClick={onNext}
+          disabled={isCurrent}
+          className="flex h-11 w-11 items-center justify-center rounded-md text-text-sub transition-colors hover:bg-bg-secondary hover:text-text-base disabled:opacity-30 disabled:hover:bg-transparent"
+          aria-label={`Next ${granularity}`}
+        >
+          <ChevronRight className="h-5 w-5" />
+        </button>
+        {onToday && !isCurrent && (
           <button
+            type="button"
             onClick={onToday}
-            className="px-2 py-1 rounded-md text-xs font-medium text-brand hover:bg-brand-alpha transition-colors"
+            className="min-h-11 rounded-md px-2 text-sm font-medium text-brand-text transition-colors hover:bg-brand-alpha"
           >
-            Today
+            {TODAY_LABEL[granularity]}
           </button>
         )}
-        <button
-          onClick={onNext}
-          className="p-1.5 rounded-md text-text-sub hover:text-text-base hover:bg-bg-secondary transition-colors"
-          aria-label="Next period"
-        >
-          <ChevronRight className="w-5 h-5" />
-        </button>
       </div>
 
-      {/* Segmented control */}
-      <div className="flex rounded-md border border-border-base overflow-hidden">
-        {options.map((opt) => (
+      <div
+        role="radiogroup"
+        aria-label="Period"
+        className="flex overflow-hidden rounded-md border border-border-input"
+      >
+        {OPTIONS.map((opt) => (
           <button
             key={opt.value}
+            type="button"
+            role="radio"
+            aria-checked={granularity === opt.value}
             onClick={() => onGranularityChange(opt.value)}
             className={cn(
-              'px-3 py-1.5 text-sm font-medium transition-colors',
+              'min-h-11 px-4 text-sm font-medium transition-colors',
               granularity === opt.value
-                ? 'bg-brand text-white'
-                : 'text-text-sub hover:text-text-base hover:bg-bg-secondary'
+                ? 'bg-brand-solid text-white'
+                : 'text-text-sub hover:bg-bg-secondary hover:text-text-base'
             )}
           >
             {opt.label}

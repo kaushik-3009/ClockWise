@@ -30,3 +30,17 @@ export function formatDurationShort(seconds: number): string {
 export function formatDateKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
+
+/** Human date like "Oct 26, 2026" in the user's locale. */
+export function formatDate(ms: number): string {
+  return new Date(ms).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+/** Human time like "2:05 PM" in the user's locale. */
+export function formatTime(ms: number): string {
+  return new Date(ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}

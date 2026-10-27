@@ -1,7 +1,17 @@
 import { useMemo, useState } from 'react';
 import { useSessions } from '@/hooks/useSessions';
 import { groupFocusSessionsByDay, getHeatmapIntensityLevel, HEATMAP_GREEN } from '@/lib/stats';
-import { formatDateKey } from '@/lib/time';
+import { formatDateKey, formatDuration } from '@/lib/time';
+
+function cellLabel(key: string): string {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
 import { cn } from '@/lib/cn';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -46,21 +56,23 @@ export function HeatmapCalendar() {
 
   const now = new Date();
   const currentYear = now.getFullYear();
-  const years = Array.from({ length: currentYear - 2023 + 1 }, (_, i) => 2023 + i).reverse();
+  const firstYear = useMemo(
+    () =>
+      sessions.reduce((min, s) => Math.min(min, new Date(s.started_at).getFullYear()), currentYear),
+    [sessions, currentYear]
+  );
+  const years = Array.from({ length: currentYear - firstYear + 1 }, (_, i) => currentYear - i);
 
   const prevMonth = () => {
     setCurrentMonth((d) => {
-      const next = new Date(d);
-      next.setMonth(next.getMonth() - 1);
-      return next;
+      // Always step from the 1st, so Mar 31 → Feb doesn't overflow into March.
+      return new Date(d.getFullYear(), d.getMonth() - 1, 1);
     });
   };
   const nextMonth = () => {
     setCurrentMonth((d) => {
-      const next = new Date(d);
-      next.setMonth(next.getMonth() + 1);
-      if (next > now) return d;
-      return next;
+      const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+      return next > now ? d : next;
     });
   };
   const setYear = (year: number) => {
@@ -74,10 +86,8 @@ export function HeatmapCalendar() {
   const isCurrentMonth =
     currentMonth.getMonth() === now.getMonth() && currentMonth.getFullYear() === now.getFullYear();
 
-  const hasActivity = (byDay: Map<string, Session[]>, key: string) => {
-    const daySessions = byDay.get(key) ?? [];
-    return daySessions.some((s) => s.type === 'focus');
-  };
+  const hasActivity = (byDay: Map<string, Session[]>, key: string) =>
+    (byDay.get(key) ?? []).reduce((sum, s) => sum + s.duration_seconds, 0) >= 60;
 
   // ── MONTH VIEW ─────────────────────────────
   const monthGrid = useMemo(() => {
@@ -150,7 +160,9 @@ export function HeatmapCalendar() {
     const jan1 = new Date(year, 0, 1);
     const startDay = jan1.getDay(); // 0=Sun
     const dec31 = new Date(year, 11, 31);
-    const daysInYear = Math.ceil((dec31.getTime() - jan1.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const daysInYear =
+      Math.round((Date.UTC(year, 11, 31) - Date.UTC(year, 0, 1)) / (1000 * 60 * 60 * 24)) + 1;
+    void dec31;
 
     const startPad = startDay;
     const totalCells = startPad + daysInYear;
@@ -195,7 +207,11 @@ export function HeatmapCalendar() {
     const monthLabels: (string | null)[] = new Array(cols).fill(null);
     for (let m = 0; m < 12; m++) {
       const firstDay = new Date(year, m, 1);
-      const dayOfYear = Math.floor((firstDay.getTime() - jan1.getTime()) / (1000 * 60 * 60 * 24));
+      // Compare calendar dates in UTC so DST shifts can't push a label into the wrong column.
+      const dayOfYear = Math.round(
+        (Date.UTC(year, m, 1) - Date.UTC(year, 0, 1)) / (1000 * 60 * 60 * 24)
+      );
+      void firstDay;
       const colIndex = Math.floor((dayOfYear + startPad) / 7);
       monthLabels[colIndex] = MONTH_SHORT[m];
     }
@@ -237,30 +253,42 @@ export function HeatmapCalendar() {
   return (
     <div className="relative">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-[15px] font-semibold text-text-base">Activity Heatmap</h3>
-          <p className="text-xs text-text-sub">Focus sessions only</p>
+          <h3 className="text-md font-semibold text-text-base">Activity</h3>
+          <p className="text-xs text-text-sub">
+            Focus time per day. Tap a day to see its sessions.
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex rounded-md border border-border-base overflow-hidden mr-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            className="flex overflow-hidden rounded-md border border-border-input"
+            role="radiogroup"
+            aria-label="Heatmap view"
+          >
             <button
+              type="button"
+              role="radio"
+              aria-checked={viewMode === 'month'}
               onClick={() => setViewMode('month')}
               className={cn(
-                'px-2.5 py-1 text-[11px] font-medium transition-colors',
+                'min-h-11 px-3 text-sm font-medium transition-colors',
                 viewMode === 'month'
-                  ? 'bg-brand text-white'
+                  ? 'bg-brand-solid text-white'
                   : 'text-text-sub hover:text-text-base hover:bg-bg-secondary'
               )}
             >
               Month
             </button>
             <button
+              type="button"
+              role="radio"
+              aria-checked={viewMode === 'year'}
               onClick={() => setViewMode('year')}
               className={cn(
-                'px-2.5 py-1 text-[11px] font-medium transition-colors',
+                'min-h-11 px-3 text-sm font-medium transition-colors',
                 viewMode === 'year'
-                  ? 'bg-brand text-white'
+                  ? 'bg-brand-solid text-white'
                   : 'text-text-sub hover:text-text-base hover:bg-bg-secondary'
               )}
             >
@@ -271,7 +299,8 @@ export function HeatmapCalendar() {
           <select
             value={currentMonth.getFullYear()}
             onChange={(e) => setYear(Number(e.target.value))}
-            className="h-7 px-1.5 rounded-md border border-border-base bg-bg-secondary text-xs text-text-base outline-none focus:border-brand"
+            aria-label="Year"
+            className="field h-11 w-auto px-2"
           >
             {years.map((y) => (
               <option key={y} value={y}>
@@ -283,20 +312,22 @@ export function HeatmapCalendar() {
           {viewMode === 'month' && (
             <>
               <button
+                type="button"
                 onClick={prevMonth}
-                className="p-1.5 rounded-md text-text-sub hover:text-text-base hover:bg-bg-secondary transition-colors"
+                className="flex h-11 w-11 items-center justify-center rounded-md text-text-sub transition-colors hover:bg-bg-secondary hover:text-text-base"
                 aria-label="Previous month"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <span className="text-sm font-medium text-text-base min-w-[140px] text-center">
+              <span className="min-w-[8.5rem] text-center text-sm font-medium text-text-base">
                 {monthLabel}
               </span>
               <button
+                type="button"
                 onClick={nextMonth}
                 disabled={isCurrentMonth}
                 className={cn(
-                  'p-1.5 rounded-md transition-colors',
+                  'flex h-11 w-11 items-center justify-center rounded-md transition-colors',
                   isCurrentMonth
                     ? 'text-text-muted cursor-not-allowed'
                     : 'text-text-sub hover:text-text-base hover:bg-bg-secondary'
@@ -313,26 +344,31 @@ export function HeatmapCalendar() {
       {viewMode === 'month' ? (
         /* ── MONTHLY VIEW ─────────────────────── */
         <div className="flex flex-col items-center">
-          <div className="grid grid-cols-7 gap-1.5 mb-2 w-full max-w-[500px] lg:max-w-[600px] xl:max-w-[700px]">
+          <div className="grid grid-cols-7 gap-1.5 mb-2 w-full max-w-[480px]">
             {dayNamesShort.map((d, i) => (
-              <div
-                key={i}
-                className="text-center text-[11px] lg:text-xs text-text-muted font-medium"
-              >
+              <div key={i} className="text-center text-xs lg:text-xs text-text-muted font-medium">
                 {d}
               </div>
             ))}
           </div>
 
-          <div className="grid grid-cols-7 gap-1.5 w-full max-w-[500px] lg:max-w-[600px] xl:max-w-[700px]">
+          <div className="grid grid-cols-7 gap-1.5 w-full max-w-[480px]">
             {monthGrid.flat().map((day, idx) => (
               <button
                 key={idx}
+                type="button"
+                disabled={day.isPadding}
+                tabIndex={day.isPadding ? -1 : undefined}
+                aria-label={
+                  day.isPadding
+                    ? undefined
+                    : `${cellLabel(day.date)}: ${formatDuration(day.focusSeconds)} focus`
+                }
                 onMouseEnter={(e) => handleCellEnter(day, e)}
                 onMouseLeave={handleCellLeave}
                 onClick={() => handleCellClick(day)}
                 className={cn(
-                  'aspect-square rounded-md transition-all duration-fast flex items-center justify-center text-[10px] font-medium',
+                  'aspect-square rounded-md transition-all duration-fast flex items-center justify-center text-2xs font-medium',
                   day.isPadding && 'invisible',
                   !day.isPadding && 'cursor-pointer hover:scale-105'
                 )}
@@ -344,7 +380,15 @@ export function HeatmapCalendar() {
                     : undefined
                 }
               >
-                {!day.isPadding && <span className="text-text-secondary">{day.dayOfMonth}</span>}
+                {!day.isPadding && (
+                  <span
+                    className={cn(
+                      day.isToday ? 'font-bold text-text-base underline' : 'text-text-sub'
+                    )}
+                  >
+                    {day.dayOfMonth}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -352,55 +396,65 @@ export function HeatmapCalendar() {
       ) : (
         /* ── YEARLY VIEW ──────────────────────── */
         yearData && (
-          <div className="w-full">
-            {/* Month labels — matching N-column grid */}
-            <div
-              className="grid gap-[3px] mb-1"
-              style={{ gridTemplateColumns: `repeat(${yearData.cols}, 1fr)` }}
-            >
-              {yearData.monthLabels.map((label, ci) => (
-                <div key={ci} className="text-center h-4 flex items-end justify-center">
-                  {label && (
-                    <span
-                      className={cn(
-                        'text-[10px] leading-none',
-                        label === MONTH_SHORT[now.getMonth()] && yearData.year === now.getFullYear()
-                          ? 'text-brand font-semibold'
-                          : 'text-text-muted'
-                      )}
-                    >
-                      {label}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Flat heatmap grid — 7 rows × N cols, all cells are siblings */}
-            <div
-              className="grid gap-[3px]"
-              style={{ gridTemplateColumns: `repeat(${yearData.cols}, 1fr)` }}
-            >
-              {yearData.rows.flat().map((day, idx) => {
-                const level = day.isPadding ? 0 : getHeatmapIntensityLevel(day.focusSeconds);
-                return (
-                  <button
-                    key={idx}
-                    onMouseEnter={(e) => handleCellEnter(day, e)}
-                    onMouseLeave={handleCellLeave}
-                    onClick={() => handleCellClick(day)}
-                    className={cn(
-                      'aspect-square rounded-sm transition-all duration-fast',
-                      day.isPadding
-                        ? 'bg-transparent cursor-default'
-                        : 'cursor-pointer hover:scale-125',
-                      day.isToday && !day.isPadding && 'ring-1 ring-text-base'
+          <div className="w-full overflow-x-auto">
+            <div className="min-w-[640px]">
+              {/* Month labels — matching N-column grid */}
+              <div
+                className="grid gap-[3px] mb-1"
+                style={{ gridTemplateColumns: `repeat(${yearData.cols}, 1fr)` }}
+              >
+                {yearData.monthLabels.map((label, ci) => (
+                  <div key={ci} className="text-center h-4 flex items-end justify-center">
+                    {label && (
+                      <span
+                        className={cn(
+                          'text-2xs leading-none',
+                          label === MONTH_SHORT[now.getMonth()] &&
+                            yearData.year === now.getFullYear()
+                            ? 'text-brand-text font-semibold'
+                            : 'text-text-muted'
+                        )}
+                      >
+                        {label}
+                      </span>
                     )}
-                    style={!day.isPadding ? { backgroundColor: HEATMAP_GREEN[level] } : undefined}
-                    title={day.isPadding ? undefined : day.date}
-                  />
-                );
-              })}
+                  </div>
+                ))}
+              </div>
+
+              {/* Flat heatmap grid — 7 rows × N cols, all cells are siblings */}
+              <div
+                className="grid gap-[3px]"
+                style={{ gridTemplateColumns: `repeat(${yearData.cols}, 1fr)` }}
+              >
+                {yearData.rows.flat().map((day, idx) => {
+                  const level = day.isPadding ? 0 : getHeatmapIntensityLevel(day.focusSeconds);
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      disabled={day.isPadding}
+                      tabIndex={day.isPadding ? -1 : undefined}
+                      aria-label={
+                        day.isPadding
+                          ? undefined
+                          : `${cellLabel(day.date)}: ${formatDuration(day.focusSeconds)} focus`
+                      }
+                      onMouseEnter={(e) => handleCellEnter(day, e)}
+                      onMouseLeave={handleCellLeave}
+                      onClick={() => handleCellClick(day)}
+                      className={cn(
+                        'aspect-square rounded-sm transition-all duration-fast',
+                        day.isPadding
+                          ? 'bg-transparent cursor-default'
+                          : 'cursor-pointer hover:scale-125',
+                        day.isToday && !day.isPadding && 'ring-1 ring-text-base'
+                      )}
+                      style={!day.isPadding ? { backgroundColor: HEATMAP_GREEN[level] } : undefined}
+                    />
+                  );
+                })}
+              </div>
             </div>
           </div>
         )
@@ -408,13 +462,13 @@ export function HeatmapCalendar() {
 
       {/* Legend */}
       <div className="flex items-center justify-center gap-4 mt-4 flex-wrap">
-        <span className="text-[10px] text-text-muted font-medium">Less focus</span>
+        <span className="text-2xs text-text-muted font-medium">Less focus</span>
         <div className="flex items-center gap-1.5">
           {HEATMAP_GREEN.map((color, i) => (
             <div key={i} className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
           ))}
         </div>
-        <span className="text-[10px] text-text-muted font-medium">More focus</span>
+        <span className="text-2xs text-text-muted font-medium">More focus</span>
       </div>
 
       {/* Tooltip */}
@@ -427,8 +481,8 @@ export function HeatmapCalendar() {
             transform: 'translateX(-50%)',
           }}
         >
-          <p className="font-medium text-text-base">{hoveredCell.date}</p>
-          <p className="text-text-sub">{(hoveredCell.seconds / 3600).toFixed(1)}h focused</p>
+          <p className="font-medium text-text-base">{cellLabel(hoveredCell.date)}</p>
+          <p className="text-text-sub">{formatDuration(hoveredCell.seconds)} focused</p>
         </div>
       )}
     </div>

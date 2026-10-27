@@ -87,6 +87,9 @@ describe('timerStore', () => {
     const fx = store().tick(T0 + 31 * MIN);
     expect(fx.sessionComplete).toBe(true);
     expect(store().status).toBe('session_complete');
+    expect(store().remaining_seconds).toBe(0);
+    store().tick(T0 + 35 * MIN);
+    expect(store().remaining_seconds).toBe(0);
 
     store().play(T0 + 40 * MIN);
     expect(store().status).toBe('running');

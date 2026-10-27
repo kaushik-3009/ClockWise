@@ -12,30 +12,30 @@ import {
 import { cn } from '@/lib/cn';
 
 interface FocusTimeChartProps {
-  data: { day: string; focusSeconds: number }[];
+  data: { day: string; focusSeconds: number | null }[];
   highlightDay?: string;
+  subtitle?: string;
   className?: string;
 }
 
-export function FocusTimeChart({ data, highlightDay, className }: FocusTimeChartProps) {
+export function FocusTimeChart({ data, highlightDay, subtitle, className }: FocusTimeChartProps) {
   const gradientId = `${useId()}-focusGradient`;
 
   const tickColor = 'var(--text-muted)';
   const gridColor = 'var(--border-color)';
 
+  // Hours with one decimal above an hour, so ticks never repeat ("1h", "1h").
   const formatY = (v: number) => {
     if (v === 0) return '0';
-    const h = Math.floor(v / 3600);
-    const m = Math.floor((v % 3600) / 60);
-    if (h > 0) return `${h}h`;
-    return `${m}m`;
+    if (v >= 3600) return `${+(v / 3600).toFixed(1)}h`;
+    return `${Math.round(v / 60)}m`;
   };
 
   return (
     <div className={cn('bg-bg-card border border-border-base rounded-md p-5 px-6', className)}>
-      <h3 className="text-[15px] font-semibold text-text-base">Focus Time</h3>
-      <p className="text-xs text-text-sub mt-0.5 mb-4">Total focused minutes per day</p>
-      {data.length === 0 || data.every((d) => d.focusSeconds === 0) ? (
+      <h3 className="text-md font-semibold text-text-base">Focus time</h3>
+      <p className="text-xs text-text-sub mt-0.5 mb-4">{subtitle ?? 'Focus time per day'}</p>
+      {data.length === 0 || data.every((d) => !d.focusSeconds) ? (
         <div className="flex items-center justify-center h-[220px] text-sm text-text-muted">
           No focus data for this period
         </div>
@@ -68,7 +68,7 @@ export function FocusTimeChart({ data, highlightDay, className }: FocusTimeChart
             <Tooltip
               content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null;
-                const v = payload[0].value as number;
+                const v = (payload[0].value as number) ?? 0;
                 const h = Math.floor(v / 3600);
                 const m = Math.floor((v % 3600) / 60);
                 return (

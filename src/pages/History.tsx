@@ -1,115 +1,118 @@
 import { useState, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   CheckCircle2,
-  XCircle,
+  CircleDashed,
   Clock,
   Trash2,
-  Edit2,
-  Filter,
+  Pencil,
+  SlidersHorizontal,
   Search,
   X,
-  ChevronDown,
-  ChevronUp,
   StickyNote,
+  Plus,
 } from 'lucide-react';
 import { useSessions } from '@/hooks/useSessions';
 import { useProjects } from '@/hooks/useProjects';
 import { useTasks } from '@/hooks/useTasks';
-import { formatDurationShort, formatDuration, formatDateKey } from '@/lib/time';
+import { usePageTitle } from '@/hooks/usePageTitle';
+import { formatDuration, formatDateKey, formatTime } from '@/lib/time';
 import { groupSessionsByDay } from '@/lib/stats';
 import { PROJECT_COLORS } from '@/lib/constants';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { SessionEditModal } from '@/components/ui/SessionEditModal';
+import { TaskRowSkeleton } from '@/components/ui/Skeleton';
+import { toast } from '@/components/ui/Toast';
+import { cn } from '@/lib/cn';
 import type { Session, PhaseType } from '@/types';
 
-export function HistoryPage() {
-  const [searchParams] = useSearchParams();
-  const initialDate = searchParams.get('date');
+const TYPE_LABEL: Record<PhaseType, string> = {
+  focus: 'Focus',
+  short_break: 'Short break',
+  long_break: 'Long break',
+};
 
-  const { sessions, removeSession, editSession } = useSessions();
+const DAYS_PER_PAGE = 14;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function dayLabel(key: string): string {
+  const today = formatDateKey(new Date());
+  const yesterday = formatDateKey(new Date(Date.now() - DAY_MS));
+  const [y, m, d] = key.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const full = date.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric',
+  });
+  if (key === today) return `Today · ${full}`;
+  if (key === yesterday) return `Yesterday · ${full}`;
+  return full;
+}
+
+export function HistoryPage() {
+  usePageTitle('History');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const dateParam = searchParams.get('date');
+
+  const {
+    sessions,
+    loading,
+    sessionsSince,
+    loadOlderSessions,
+    addSession,
+    removeSession,
+    editSession,
+  } = useSessions();
   const { projects } = useProjects();
   const { allTasks } = useTasks();
 
-  // Filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [projectFilter, setProjectFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [daysFilter, setDaysFilter] = useState<string>('all');
+  const [projectFilter, setProjectFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [daysFilter, setDaysFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
+  const [daysShown, setDaysShown] = useState(DAYS_PER_PAGE);
 
-  // Edit/delete
-  const [editingSession, setEditingSession] = useState<Session | null>(null);
-  const [confirmDialog, setConfirmDialog] = useState<{
-    open: boolean;
-    session: Session | null;
-  }>({ open: false, session: null });
+  const [editing, setEditing] = useState<Session | 'new' | null>(null);
+  const [deleting, setDeleting] = useState<Session | null>(null);
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
 
-  const projectMap = useMemo(() => {
-    const map = new Map<string, (typeof projects)[0]>();
-    for (const p of projects) map.set(p.id, p);
-    return map;
-  }, [projects]);
+  const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
+  const taskMap = useMemo(() => new Map(allTasks.map((t) => [t.id, t])), [allTasks]);
 
-  const taskMap = useMemo(() => {
-    const map = new Map<string, (typeof allTasks)[0]>();
-    for (const t of allTasks) map.set(t.id, t);
-    return map;
-  }, [allTasks]);
+  const filtersActive =
+    projectFilter !== 'all' ||
+    typeFilter !== 'all' ||
+    statusFilter !== 'all' ||
+    daysFilter !== 'all' ||
+    searchQuery.trim() !== '';
 
-  // Apply filters
   const filteredSessions = useMemo(() => {
-    let result = [...sessions];
-
-    // Date range
-    if (daysFilter !== 'all') {
-      const days = parseInt(daysFilter);
-      const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-      result = result.filter((s) => s.started_at >= cutoff);
-    }
-
-    // Project filter
-    if (projectFilter !== 'all') {
-      result = result.filter((s) => s.project_id === projectFilter);
-    }
-
-    // Type filter
-    if (typeFilter !== 'all') {
-      result = result.filter((s) => s.type === typeFilter);
-    }
-
-    // Status filter
-    if (statusFilter !== 'all') {
-      if (statusFilter === 'completed') {
-        result = result.filter((s) => s.completed);
-      } else {
-        result = result.filter((s) => !s.completed);
-      }
-    }
-
-    // Search
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      result = result.filter((s) => {
+    const q = searchQuery.trim().toLowerCase();
+    const cutoff = daysFilter === 'all' ? 0 : Date.now() - Number(daysFilter) * DAY_MS;
+    return sessions.filter((s) => {
+      if (s.started_at < cutoff) return false;
+      if (
+        projectFilter === 'none'
+          ? s.project_id
+          : projectFilter !== 'all' && s.project_id !== projectFilter
+      )
+        return false;
+      if (typeFilter !== 'all' && s.type !== typeFilter) return false;
+      if (statusFilter === 'completed' && !s.completed) return false;
+      if (statusFilter === 'unfinished' && s.completed) return false;
+      if (dateParam && formatDateKey(new Date(s.started_at)) !== dateParam) return false;
+      if (q) {
         const project = s.project_id ? projectMap.get(s.project_id) : undefined;
         const task = s.task_id ? taskMap.get(s.task_id) : undefined;
-        return (
-          project?.name.toLowerCase().includes(q) || task?.name.toLowerCase().includes(q) || false
-        );
-      });
-    }
-
-    // If URL has ?date=, show only that date
-    if (initialDate) {
-      result = result.filter((s) => {
-        const key = formatDateKey(new Date(s.started_at));
-        return key === initialDate;
-      });
-    }
-
-    return result;
+        const haystack = `${project?.name ?? ''} ${task?.name ?? ''} ${s.note ?? ''}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
   }, [
     sessions,
     daysFilter,
@@ -119,18 +122,20 @@ export function HistoryPage() {
     searchQuery,
     projectMap,
     taskMap,
-    initialDate,
+    dateParam,
   ]);
 
-  // Summary stats for filtered set
+  // Same definitions as Statistics: focus time counts every focus session.
   const summary = useMemo(() => {
-    const focus = filteredSessions
-      .filter((s) => s.type === 'focus' && s.completed)
-      .reduce((sum, s) => sum + s.duration_seconds, 0);
-    const total = filteredSessions.reduce((sum, s) => sum + s.duration_seconds, 0);
-    const started = filteredSessions.length;
-    const completed = filteredSessions.filter((s) => s.completed).length;
-    return { focusSeconds: focus, totalSeconds: total, started, completed };
+    const focus = filteredSessions.filter((s) => s.type === 'focus');
+    return {
+      focusSessions: focus.length,
+      completedFocus: focus.filter((s) => s.completed).length,
+      focusSeconds: focus.reduce((sum, s) => sum + s.duration_seconds, 0),
+      breakSeconds: filteredSessions
+        .filter((s) => s.type !== 'focus')
+        .reduce((sum, s) => sum + s.duration_seconds, 0),
+    };
   }, [filteredSessions]);
 
   const sessionsByDay = useMemo(() => groupSessionsByDay(filteredSessions), [filteredSessions]);
@@ -138,342 +143,370 @@ export function HistoryPage() {
     () => Array.from(sessionsByDay.keys()).sort((a, b) => b.localeCompare(a)),
     [sessionsByDay]
   );
+  const visibleDays = sortedDays.slice(0, daysShown);
 
-  const formatDateLabel = (key: string) => {
-    const [y, m, d] = key.split('-').map(Number);
-    const date = new Date(y, m - 1, d);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+  const clearFilters = () => {
+    setSearchQuery('');
+    setProjectFilter('all');
+    setTypeFilter('all');
+    setStatusFilter('all');
+    setDaysFilter('all');
   };
 
-  const typeLabel = (type: PhaseType) => {
-    switch (type) {
-      case 'focus':
-        return 'Focus';
-      case 'short_break':
-        return 'Short Break';
-      case 'long_break':
-        return 'Long Break';
-    }
-  };
+  const editingSession = editing === 'new' ? null : editing;
 
   return (
-    <div className="p-6 lg:p-12 w-full 2xl:max-w-[1600px] 2xl:mx-auto animate-[page-enter_200ms_ease]">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <h1 className="text-2xl font-semibold text-text-base">
-          {initialDate ? `Sessions on ${initialDate}` : 'History'}
-        </h1>
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className="inline-flex items-center gap-2 h-9 px-3 rounded-md border border-border-base text-sm text-text-sub hover:text-text-base hover:bg-bg-secondary transition-colors"
-        >
-          <Filter className="w-4 h-4" />
-          Filters
-          {(projectFilter !== 'all' ||
-            typeFilter !== 'all' ||
-            statusFilter !== 'all' ||
-            daysFilter !== 'all' ||
-            searchQuery) && <span className="w-2 h-2 rounded-full bg-brand" />}
-        </button>
+    <div className="mx-auto w-full max-w-[1100px] px-4 py-6 sm:px-6 lg:p-12">
+      <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <h1 className="text-2xl font-semibold text-text-base">History</h1>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setEditing('new')}
+            className="btn-secondary flex-1 sm:flex-none"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Log time
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowFilters(!showFilters)}
+            aria-expanded={showFilters}
+            aria-controls="history-filters"
+            className="btn-secondary flex-1 sm:flex-none"
+          >
+            <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+            Filters
+            {filtersActive && (
+              <span className="h-2 w-2 rounded-full bg-brand" aria-label="(active)" />
+            )}
+          </button>
+        </div>
       </div>
 
-      {/* Filters panel */}
+      {dateParam && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-md bg-bg-secondary px-4 py-2 text-sm text-text-sub">
+          <span>Showing {dayLabel(dateParam)}</span>
+          <button
+            type="button"
+            onClick={() => setSearchParams({})}
+            className="min-h-11 font-medium text-brand-text hover:underline"
+          >
+            Show all days
+          </button>
+        </div>
+      )}
+
       {showFilters && (
-        <div className="bg-bg-card border border-border-base rounded-lg p-4 mb-6 flex flex-col gap-3">
-          {/* Search */}
+        <div
+          id="history-filters"
+          className="mb-6 flex flex-col gap-3 rounded-lg border border-border-base bg-bg-card p-4"
+        >
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+            <Search
+              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted"
+              aria-hidden="true"
+            />
             <input
+              type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by project or task..."
-              className="w-full h-10 pl-9 pr-3 rounded-md border border-border-base bg-bg-secondary text-text-base text-sm outline-none focus:border-brand transition-colors"
+              placeholder="Search projects, tasks and notes…"
+              aria-label="Search sessions"
+              className="field pl-9"
             />
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div>
-              <label className="block text-xs text-text-sub mb-1">Date range</label>
-              <select
-                value={daysFilter}
-                onChange={(e) => setDaysFilter(e.target.value)}
-                className="w-full h-9 px-2 rounded-md border border-border-base bg-bg-secondary text-sm text-text-base outline-none focus:border-brand"
-              >
-                <option value="all">All time</option>
-                <option value="7">Last 7 days</option>
-                <option value="30">Last 30 days</option>
-                <option value="90">Last 90 days</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-text-sub mb-1">Project</label>
-              <select
-                value={projectFilter}
-                onChange={(e) => setProjectFilter(e.target.value)}
-                className="w-full h-9 px-2 rounded-md border border-border-base bg-bg-secondary text-sm text-text-base outline-none focus:border-brand"
-              >
-                <option value="all">All projects</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-text-sub mb-1">Type</label>
-              <select
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
-                className="w-full h-9 px-2 rounded-md border border-border-base bg-bg-secondary text-sm text-text-base outline-none focus:border-brand"
-              >
-                <option value="all">All types</option>
-                <option value="focus">Focus</option>
-                <option value="short_break">Short Break</option>
-                <option value="long_break">Long Break</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-text-sub mb-1">Status</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full h-9 px-2 rounded-md border border-border-base bg-bg-secondary text-sm text-text-base outline-none focus:border-brand"
-              >
-                <option value="all">All</option>
-                <option value="completed">Completed</option>
-                <option value="abandoned">Abandoned</option>
-              </select>
-            </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              {
+                label: 'Date range',
+                value: daysFilter,
+                set: setDaysFilter,
+                options: [
+                  ['all', 'All loaded'],
+                  ['7', 'Last 7 days'],
+                  ['30', 'Last 30 days'],
+                  ['90', 'Last 90 days'],
+                ],
+              },
+              {
+                label: 'Project',
+                value: projectFilter,
+                set: setProjectFilter,
+                options: [
+                  ['all', 'All projects'],
+                  ['none', 'No project'],
+                  ...projects.map((p) => [p.id, p.name]),
+                ],
+              },
+              {
+                label: 'Type',
+                value: typeFilter,
+                set: setTypeFilter,
+                options: [
+                  ['all', 'All types'],
+                  ['focus', 'Focus'],
+                  ['short_break', 'Short break'],
+                  ['long_break', 'Long break'],
+                ],
+              },
+              {
+                label: 'Status',
+                value: statusFilter,
+                set: setStatusFilter,
+                options: [
+                  ['all', 'Any'],
+                  ['completed', 'Finished'],
+                  ['unfinished', 'Skipped or reset'],
+                ],
+              },
+            ].map((f) => (
+              <label key={f.label} className="flex flex-col gap-1">
+                <span className="text-xs text-text-sub">{f.label}</span>
+                <select value={f.value} onChange={(e) => f.set(e.target.value)} className="field">
+                  {f.options.map(([v, l]) => (
+                    <option key={v} value={v}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
           </div>
-
-          {/* Clear filters */}
-          {(projectFilter !== 'all' ||
-            typeFilter !== 'all' ||
-            statusFilter !== 'all' ||
-            daysFilter !== 'all' ||
-            searchQuery) && (
+          {filtersActive && (
             <button
-              onClick={() => {
-                setSearchQuery('');
-                setProjectFilter('all');
-                setTypeFilter('all');
-                setStatusFilter('all');
-                setDaysFilter('all');
-              }}
-              className="flex items-center gap-1.5 text-xs text-text-sub hover:text-error self-start"
+              type="button"
+              onClick={clearFilters}
+              className="flex min-h-11 items-center gap-1.5 self-start text-sm text-text-sub hover:text-text-base"
             >
-              <X className="w-3.5 h-3.5" />
-              Clear all filters
+              <X className="h-4 w-4" aria-hidden="true" />
+              Clear filters
             </button>
           )}
         </div>
       )}
 
-      {/* Summary bar */}
       {filteredSessions.length > 0 && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-          <div className="bg-bg-card border border-border-base rounded-md p-3">
-            <p className="text-xs text-text-sub mb-1">Sessions</p>
-            <p className="text-lg font-semibold text-text-base">{summary.started}</p>
-          </div>
-          <div className="bg-bg-card border border-border-base rounded-md p-3">
-            <p className="text-xs text-text-sub mb-1">Completion</p>
-            <p className="text-lg font-semibold text-text-base">
-              {summary.started > 0 ? Math.round((summary.completed / summary.started) * 100) : 0}%
-            </p>
-          </div>
-          <div className="bg-bg-card border border-border-base rounded-md p-3">
-            <p className="text-xs text-text-sub mb-1">Focus time</p>
-            <p className="text-lg font-semibold text-text-base">
-              {formatDuration(summary.focusSeconds)}
-            </p>
-          </div>
-          <div className="bg-bg-card border border-border-base rounded-md p-3">
-            <p className="text-xs text-text-sub mb-1">Total time</p>
-            <p className="text-lg font-semibold text-text-base">
-              {formatDuration(summary.totalSeconds)}
-            </p>
-          </div>
-        </div>
+        <dl className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[
+            ['Focus time', formatDuration(summary.focusSeconds)],
+            ['Focus sessions', String(summary.focusSessions)],
+            [
+              'Finished',
+              summary.focusSessions
+                ? `${Math.round((summary.completedFocus / summary.focusSessions) * 100)}%`
+                : '—',
+            ],
+            ['Break time', formatDuration(summary.breakSeconds)],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-md border border-border-base bg-bg-card p-3">
+              <dt className="mb-1 text-xs text-text-sub">{label}</dt>
+              <dd className="text-lg font-semibold text-text-base">{value}</dd>
+            </div>
+          ))}
+        </dl>
       )}
 
-      {filteredSessions.length === 0 && sessions.length === 0 ? (
-        <div className="flex flex-col gap-8">
-          <div className="flex items-center gap-3 bg-bg-card border border-border-base rounded-md px-4 py-3">
-            <Clock className="w-5 h-5 text-brand shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-text-base">No sessions yet</p>
-              <p className="text-xs text-text-sub">
-                Complete a focus session to see your history — here's a preview of the layout
-              </p>
-            </div>
-          </div>
-          <div className="opacity-50 pointer-events-none select-none flex flex-col gap-8">
-            <div>
-              <h2 className="text-sm font-semibold text-text-sub uppercase tracking-wide mb-3">
-                Today
-              </h2>
-              <div className="flex flex-col gap-2">
-                {[0, 1, 2].map((i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-3 p-3 bg-bg-card border border-border-base rounded-md"
-                  >
-                    <span className="w-2 h-2 rounded-full shrink-0 bg-text-muted" />
-                    <div className="flex flex-col min-w-0 flex-1 gap-1.5">
-                      <span className="h-3.5 w-32 rounded bg-bg-tertiary block" />
-                      <span className="h-2.5 w-20 rounded bg-bg-tertiary block" />
-                    </div>
-                    <span className="h-3.5 w-10 rounded bg-bg-tertiary block shrink-0" />
-                    <CheckCircle2 className="w-4 h-4 text-text-muted shrink-0" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+      {loading ? (
+        <div className="flex flex-col gap-2">
+          {[0, 1, 2, 3].map((i) => (
+            <TaskRowSkeleton key={i} />
+          ))}
+        </div>
+      ) : sessions.length === 0 ? (
+        <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
+          <Clock className="mb-4 h-12 w-12 text-text-muted" aria-hidden="true" />
+          <p className="mb-1 text-lg font-medium text-text-base">No sessions yet</p>
+          <p className="mb-5 max-w-sm text-sm text-text-sub">
+            Every focus session and break you run is logged here automatically. You can also log
+            time you tracked elsewhere.
+          </p>
+          <Link to="/timer" className="btn-primary">
+            Start a focus session
+          </Link>
         </div>
       ) : filteredSessions.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-text-muted">
-          <Clock className="w-12 h-12 mb-4 opacity-80" />
-          <p className="text-lg font-medium mb-2">No matching sessions</p>
-          <p className="text-sm">Try adjusting your filters</p>
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <p className="mb-1 text-lg font-medium text-text-base">No matching sessions</p>
+          <p className="mb-4 text-sm text-text-sub">Try different filters.</p>
+          {filtersActive && (
+            <button type="button" className="btn-secondary" onClick={clearFilters}>
+              Clear filters
+            </button>
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-8">
-          {sortedDays.map((day) => {
+          {visibleDays.map((day) => {
             const daySessions = sessionsByDay.get(day) ?? [];
+            const dayFocus = daySessions
+              .filter((s) => s.type === 'focus')
+              .reduce((sum, s) => sum + s.duration_seconds, 0);
             return (
-              <div key={day}>
-                <h2 className="text-sm font-semibold text-text-sub uppercase tracking-wide mb-3">
-                  {formatDateLabel(day)}
-                </h2>
-                <div className="flex flex-col gap-2">
+              <section key={day} aria-labelledby={`day-${day}`}>
+                <div className="mb-3 flex items-baseline justify-between gap-3">
+                  <h2 id={`day-${day}`} className="text-sm font-semibold text-text-base">
+                    {dayLabel(day)}
+                  </h2>
+                  <span className="shrink-0 text-xs text-text-sub">
+                    {formatDuration(dayFocus)} focus
+                  </span>
+                </div>
+                <ul className="flex flex-col gap-2">
                   {daySessions.map((session) => {
                     const project = session.project_id
                       ? projectMap.get(session.project_id)
                       : undefined;
                     const task = session.task_id ? taskMap.get(session.task_id) : undefined;
                     const color = project ? PROJECT_COLORS[project.color] : 'var(--text-muted)';
-
                     const isExpanded = expandedNotes.has(session.id);
+                    const end =
+                      session.ended_at ?? session.started_at + session.duration_seconds * 1000;
+                    const projectName = session.project_id
+                      ? (project?.name ?? 'Deleted project')
+                      : 'No project';
+                    const title =
+                      session.type === 'focus'
+                        ? (task?.name ?? (session.task_id ? 'Deleted task' : projectName))
+                        : TYPE_LABEL[session.type];
 
                     return (
-                      <div key={session.id}>
-                        <div className="flex items-center gap-3 p-3 bg-bg-card border border-border-base rounded-md group">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <span
-                              className="w-2 h-2 rounded-full shrink-0"
-                              style={{ backgroundColor: color }}
-                            />
-                            <div className="flex flex-col min-w-0">
-                              <span className="text-sm font-medium text-text-base truncate">
-                                {task?.name ?? project?.name ?? 'Focus Session'}
-                              </span>
-                              <span className="text-xs text-text-sub">
-                                {project?.name ?? 'No project'} · {typeLabel(session.type)}
-                              </span>
-                            </div>
+                      <li
+                        key={session.id}
+                        className="rounded-md border border-border-base bg-bg-card"
+                      >
+                        <div className="flex items-center gap-2 py-1.5 pl-3 pr-1.5 sm:gap-3">
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: color }}
+                          />
+                          <div className="flex min-w-0 flex-1 flex-col py-1">
+                            <span className="truncate text-sm font-medium text-text-base">
+                              {title}
+                            </span>
+                            <span className="truncate text-xs text-text-sub">
+                              {formatTime(session.started_at)}–{formatTime(end)}
+                              {session.type === 'focus' && ` · ${projectName}`}
+                            </span>
                           </div>
-
-                          <span className="font-mono text-sm text-text-base shrink-0">
-                            {formatDurationShort(session.duration_seconds)}
+                          <span className="shrink-0 text-sm font-semibold tabular-nums text-text-base">
+                            {formatDuration(session.duration_seconds) === '0m'
+                              ? '<1m'
+                              : formatDuration(session.duration_seconds)}
                           </span>
-
                           {session.completed ? (
-                            <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
+                            <CheckCircle2
+                              className="h-4 w-4 shrink-0 text-success-text"
+                              aria-label="Finished"
+                            />
                           ) : (
-                            <XCircle className="w-4 h-4 text-error shrink-0" />
+                            <CircleDashed
+                              className="h-4 w-4 shrink-0 text-text-muted"
+                              aria-label="Skipped or reset early"
+                            />
                           )}
-
-                          {/* Note toggle */}
-                          {session.note && (
+                          <div className="flex shrink-0 items-center">
+                            {session.note && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedNotes((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(session.id)) next.delete(session.id);
+                                    else next.add(session.id);
+                                    return next;
+                                  })
+                                }
+                                aria-expanded={isExpanded}
+                                className={cn(
+                                  'flex h-11 w-11 items-center justify-center rounded-full transition-colors hover:bg-bg-secondary',
+                                  isExpanded ? 'text-brand-text' : 'text-text-sub'
+                                )}
+                                aria-label={isExpanded ? 'Hide note' : 'Show note'}
+                              >
+                                <StickyNote className="h-4 w-4" />
+                              </button>
+                            )}
                             <button
-                              onClick={() => {
-                                setExpandedNotes((prev) => {
-                                  const next = new Set(prev);
-                                  if (next.has(session.id)) next.delete(session.id);
-                                  else next.add(session.id);
-                                  return next;
-                                });
-                              }}
-                              className="p-1.5 rounded text-text-sub hover:text-brand hover:bg-brand-alpha transition-colors shrink-0"
-                              aria-label={isExpanded ? 'Hide note' : 'Show note'}
-                            >
-                              {isExpanded ? (
-                                <ChevronUp className="w-3.5 h-3.5" />
-                              ) : (
-                                <ChevronDown className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                          )}
-
-                          {/* Actions */}
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => setEditingSession(session)}
-                              className="p-1.5 rounded text-text-sub hover:text-brand hover:bg-brand-alpha transition-colors"
+                              type="button"
+                              onClick={() => setEditing(session)}
+                              className="flex h-11 w-11 items-center justify-center rounded-full text-text-sub transition-colors hover:bg-bg-secondary hover:text-text-base"
                               aria-label="Edit session"
                             >
-                              <Edit2 className="w-3.5 h-3.5" />
+                              <Pencil className="h-4 w-4" />
                             </button>
                             <button
-                              onClick={() => setConfirmDialog({ open: true, session })}
-                              className="p-1.5 rounded text-text-sub hover:text-error hover:bg-error/10 transition-colors"
+                              type="button"
+                              onClick={() => setDeleting(session)}
+                              className="flex h-11 w-11 items-center justify-center rounded-full text-text-sub transition-colors hover:bg-error-light hover:text-error-text"
                               aria-label="Delete session"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="h-4 w-4" />
                             </button>
                           </div>
                         </div>
-
-                        {/* Expanded note */}
                         {isExpanded && session.note && (
-                          <div className="mx-3 -mt-1 mb-1 px-3 py-2.5 bg-bg-secondary border border-t-0 border-border-base rounded-b-md">
-                            <div className="flex items-start gap-2">
-                              <StickyNote className="w-3.5 h-3.5 text-text-muted shrink-0 mt-0.5" />
-                              <p className="text-sm text-text-sub whitespace-pre-wrap">
-                                {session.note}
-                              </p>
-                            </div>
-                          </div>
+                          <p className="whitespace-pre-wrap border-t border-border-base px-4 py-2.5 text-sm text-text-sub">
+                            {session.note}
+                          </p>
                         )}
-                      </div>
+                      </li>
                     );
                   })}
-                </div>
-              </div>
+                </ul>
+              </section>
             );
           })}
+
+          <div className="flex flex-col items-center gap-2 pb-4">
+            {sortedDays.length > daysShown ? (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setDaysShown((n) => n + DAYS_PER_PAGE)}
+              >
+                Show more days
+              </button>
+            ) : (
+              <>
+                <p className="text-xs text-text-muted">
+                  Showing sessions since{' '}
+                  {new Date(sessionsSince).toLocaleDateString(undefined, {
+                    month: 'long',
+                    year: 'numeric',
+                  })}
+                </p>
+                <button type="button" className="btn-secondary" onClick={loadOlderSessions}>
+                  Load older history
+                </button>
+              </>
+            )}
+          </div>
         </div>
       )}
 
       <SessionEditModal
-        open={editingSession !== null}
+        open={editing !== null}
         session={editingSession}
-        onClose={() => setEditingSession(null)}
-        onSave={(changes) => {
+        projects={projects}
+        tasks={allTasks}
+        onClose={() => setEditing(null)}
+        onSave={(draft) => {
           if (editingSession) {
-            editSession(editingSession.id, changes);
-            setEditingSession(null);
+            editSession(editingSession.id, draft);
+          } else {
+            addSession({ ...draft, phase_number: 1 });
+            toast.success('Session logged.');
           }
         }}
       />
 
       <ConfirmDialog
-        open={confirmDialog.open}
-        onClose={() => setConfirmDialog({ open: false, session: null })}
-        onConfirm={() => {
-          if (confirmDialog.session) {
-            removeSession(confirmDialog.session.id);
-          }
-        }}
-        title="Delete Session"
-        description={`Are you sure you want to delete this ${confirmDialog.session?.type ?? ''} session? This action cannot be undone.`}
+        open={deleting !== null}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => deleting && removeSession(deleting.id)}
+        title="Delete this session?"
+        description="It will be removed from your history, stats and streaks. This can’t be undone."
         confirmLabel="Delete"
         variant="danger"
       />

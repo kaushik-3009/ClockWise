@@ -20,7 +20,10 @@ function apply(fx: TimerEffects): void {
 
   if (owner_uid) {
     for (const record of fx.records) {
-      const { written } = createSession(owner_uid, record);
+      // Same phase → same id, so two open tabs (or devices) finishing the same
+      // phase write one session instead of two.
+      const id = `t-${record.started_at}-${record.phase_number}-${record.type}`;
+      const { written } = createSession(owner_uid, record, id);
       reportFailure(written, "Couldn't save a finished session to your history");
     }
   }

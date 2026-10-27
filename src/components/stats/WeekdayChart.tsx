@@ -26,7 +26,7 @@ export function WeekdayChart({ data, insight, className }: WeekdayChartProps) {
     >
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-[15px] font-semibold text-text-base">Productivity by weekday</h2>
+          <h2 className="text-md font-semibold text-text-base">Productivity by weekday</h2>
           <p className="text-sm text-text-sub mt-0.5">Focus hours across the week</p>
         </div>
       </div>

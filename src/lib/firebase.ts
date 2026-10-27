@@ -4,6 +4,7 @@ import {
   indexedDBLocalPersistence,
   browserLocalPersistence,
   inMemoryPersistence,
+  connectAuthEmulator,
   type Auth,
 } from 'firebase/auth';
 import {
@@ -13,6 +14,7 @@ import {
   memoryLocalCache,
   terminate,
   clearIndexedDbPersistence,
+  connectFirestoreEmulator,
   type Firestore,
 } from 'firebase/firestore';
 
@@ -33,6 +35,9 @@ function hasRequiredConfig(): boolean {
     firebaseConfig.appId
   );
 }
+
+/** Local development against `npm run emulators` (see README). */
+const useEmulators = import.meta.env.DEV && import.meta.env.VITE_USE_EMULATORS === 'true';
 
 let app: FirebaseApp | null = null;
 
@@ -59,6 +64,9 @@ export function getFirebaseAuth(): Auth {
     auth = initializeAuth(getFirebaseApp(), {
       persistence: [indexedDBLocalPersistence, browserLocalPersistence, inMemoryPersistence],
     });
+    if (useEmulators) {
+      connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    }
   }
   return auth;
 }
@@ -84,6 +92,7 @@ export function getFirebaseFirestore(): Firestore {
         localCache: memoryLocalCache(),
       });
     }
+    if (useEmulators) connectFirestoreEmulator(firestore, '127.0.0.1', 8080);
   }
   return firestore;
 }

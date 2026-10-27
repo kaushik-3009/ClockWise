@@ -1,5 +1,5 @@
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
-import { useUiStore } from '@/stores/uiStore';
+import { useUiStore, resolveTheme } from '@/stores/uiStore';
 import { cn } from '@/lib/cn';
 
 interface FocusVsBreakDonutProps {
@@ -41,7 +41,7 @@ export function FocusVsBreakDonut({
   breakSeconds,
   className,
 }: FocusVsBreakDonutProps) {
-  const { theme } = useUiStore();
+  const theme = resolveTheme(useUiStore((s) => s.theme));
   const data = [
     { name: 'Focus', value: focusSeconds },
     { name: 'Break', value: breakSeconds },
@@ -57,7 +57,7 @@ export function FocusVsBreakDonut({
 
   return (
     <div className={cn('bg-bg-card border border-border-base rounded-md p-5 px-6', className)}>
-      <h3 className="text-[15px] font-semibold text-text-base">Focus vs Break</h3>
+      <h3 className="text-md font-semibold text-text-base">Focus vs breaks</h3>
       <p className="text-xs text-text-sub mt-0.5 mb-4">Time distribution</p>
       {total === 0 ? (
         <div className="flex items-center justify-center h-[200px] text-sm text-text-muted">
@@ -89,7 +89,7 @@ export function FocusVsBreakDonut({
             {/* Center label */}
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
               <span className="text-2xl font-display font-bold text-text-base">{focusPct}%</span>
-              <span className="text-[10px] text-text-sub">Focus</span>
+              <span className="text-2xs text-text-sub">Focus</span>
             </div>
           </div>
           <div className="flex justify-center gap-6 mt-3">

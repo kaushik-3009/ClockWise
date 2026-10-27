@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useAuth } from '@/lib/useAuth';
 import { useData } from '@/hooks/useData';
 import { reportFailure } from '@/components/ui/Toast';
-import { updateSession, deleteSession } from '@/db/queries/sessions';
+import { createSession, updateSession, deleteSession } from '@/db/queries/sessions';
 import type { Session } from '@/types';
 
 export function useSessions(projectId?: string) {
@@ -13,6 +13,14 @@ export function useSessions(projectId?: string) {
   const sessions = useMemo(
     () => (projectId ? all.filter((s) => s.project_id === projectId) : all),
     [all, projectId]
+  );
+
+  const addSession = useCallback(
+    (data: Omit<Session, 'id' | 'user_id'>) => {
+      if (!uid) return;
+      reportFailure(createSession(uid, data).written, "Couldn't save the session");
+    },
+    [uid]
   );
 
   const editSession = useCallback(
@@ -36,6 +44,7 @@ export function useSessions(projectId?: string) {
     loading: loading.sessions,
     sessionsSince,
     loadOlderSessions,
+    addSession,
     editSession,
     removeSession,
   };

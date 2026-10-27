@@ -57,8 +57,9 @@ export function Modal({ open, onClose, title, children, className, footer }: Mod
       if (dialogs[dialogs.length - 1] !== panel) return;
 
       if (e.key === 'Escape') {
+        // An inner control (e.g. an inline editor) may handle Escape itself.
+        if (e.defaultPrevented) return;
         e.preventDefault();
-        e.stopPropagation();
         onCloseRef.current();
         return;
       }
@@ -84,9 +85,9 @@ export function Modal({ open, onClose, title, children, className, footer }: Mod
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown, true);
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown, true);
+      document.removeEventListener('keydown', handleKeyDown);
       unlockScroll();
       // Return focus to whatever opened the dialog.
       if (previouslyFocused && document.contains(previouslyFocused)) {
