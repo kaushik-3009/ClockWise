@@ -36,8 +36,11 @@ function hasRequiredConfig(): boolean {
   );
 }
 
-/** Local development against `npm run emulators` (see README). */
-const useEmulators = import.meta.env.DEV && import.meta.env.VITE_USE_EMULATORS === 'true';
+/**
+ * Local development and testing against `npm run emulators` (see README). Opt-in
+ * via an env var set at build/dev time; production deploys never set it.
+ */
+const useEmulators = import.meta.env.VITE_USE_EMULATORS === 'true';
 
 let app: FirebaseApp | null = null;
 
