@@ -15,8 +15,12 @@ import {
 } from '@/lib/sounds';
 import { notifyPhaseComplete, notifySessionComplete } from '@/lib/notifications';
 
-function apply(fx: TimerEffects): void {
+/** A chime for a phase that ended longer ago than this would be confusing. */
+const STALE_FINISH_MS = 90_000;
+
+function apply(fx: TimerEffects): Promise<void>[] {
   const { owner_uid, settings } = useTimerStore.getState();
+  const writes: Promise<void>[] = [];
 
   if (owner_uid) {
     for (const record of fx.records) {
@@ -25,10 +29,13 @@ function apply(fx: TimerEffects): void {
       const id = `t-${record.started_at}-${record.phase_number}-${record.type}`;
       const { written } = createSession(owner_uid, record, id);
       reportFailure(written, "Couldn't save a finished session to your history");
+      writes.push(written);
     }
   }
 
-  if (fx.finished.length > 0) {
+  // Coming back hours later shouldn't ring for phases that ended long ago.
+  const fresh = fx.lastFinishedAt !== null && Date.now() - fx.lastFinishedAt < STALE_FINISH_MS;
+  if (fx.finished.length > 0 && fresh) {
     playTimerCompleteSound(settings.sound_enabled);
     // In-app feedback covers the visible case; notify when the app is hidden.
     if (settings.notifications_enabled && document.visibilityState === 'hidden') {
@@ -38,6 +45,7 @@ function apply(fx: TimerEffects): void {
   } else if (fx.warn) {
     playWarningSound(settings.sound_enabled);
   }
+  return writes;
 }
 
 const sound = () => useTimerStore.getState().settings.sound_enabled;
@@ -69,4 +77,20 @@ export function timerSkip(): void {
 export function timerReset(): void {
   playResetSound(sound());
   apply(useTimerStore.getState().reset(Date.now()));
+}
+
+/** Change what you're focusing on; time already spent stays with the previous choice. */
+export function timerSetContext(projectId?: string, taskId?: string): void {
+  apply(useTimerStore.getState().setContext(projectId, taskId, Date.now()));
+}
+
+/**
+ * Before signing out: save the phase in progress (if it's long enough to keep)
+ * and wait briefly for the write, since the local cache is wiped right after.
+ */
+export async function timerFlushBeforeLogout(): Promise<void> {
+  const writes = apply(useTimerStore.getState().reset(Date.now()));
+  if (writes.length === 0) return;
+  const timeout = new Promise<void>((resolve) => setTimeout(resolve, 3000));
+  await Promise.race([Promise.allSettled(writes), timeout]);
 }

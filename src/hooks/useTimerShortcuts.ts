@@ -9,13 +9,19 @@ interface Handlers {
   onHelp: () => void;
 }
 
-/** Elements where Space/letters have their own meaning and must not be hijacked. */
-function isInteractiveTarget(target: EventTarget | null): boolean {
+/** Fields where typed letters are text, so no single-key shortcut may fire. */
+function isTextEntry(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;
+  return Boolean(target.closest('input, textarea, select, [role="slider"]'));
+}
+
+/** Controls that Space activates, so Space must press them rather than toggle the timer. */
+function isActivatable(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
   return Boolean(
     target.closest(
-      'input, textarea, select, button, a[href], summary, [role="button"], [role="menuitem"], [role="option"], [role="slider"], [role="switch"], [role="tab"]'
+      'button, a[href], summary, [role="button"], [role="menuitem"], [role="option"], [role="switch"], [role="tab"], [role="radio"], [role="checkbox"]'
     )
   );
 }
@@ -37,16 +43,18 @@ export function useTimerShortcuts(handlers: Handlers) {
       if (e.defaultPrevented || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       if (dialogOpen()) return;
 
+      if (isTextEntry(e.target)) return;
       if (e.key === '?') {
-        if (isInteractiveTarget(e.target) && !(e.target instanceof HTMLButtonElement)) return;
         e.preventDefault();
         h.onHelp();
         return;
       }
-      if (!h.enabled || isInteractiveTarget(e.target)) return;
+      if (!h.enabled) return;
 
       switch (e.key) {
         case ' ':
+          // Space on a focused button presses that button.
+          if (isActivatable(e.target)) return;
           e.preventDefault();
           h.onToggle();
           break;

@@ -1,6 +1,13 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useTimerStore, elapsedMs, MIN_RECORD_SECONDS } from '@/stores/timerStore';
-import { timerPause, timerPlay, timerReset, timerSkip, timerToggle } from '@/lib/timerController';
+import {
+  timerPause,
+  timerPlay,
+  timerReset,
+  timerSetContext,
+  timerSkip,
+  timerToggle,
+} from '@/lib/timerController';
 import { useProjects } from '@/hooks/useProjects';
 import { useTasks } from '@/hooks/useTasks';
 import { useTimerShortcuts } from '@/hooks/useTimerShortcuts';
@@ -41,9 +48,9 @@ export function TimerPage() {
   const shortcutsEnabled = useTimerStore((s) => s.settings.keyboard_shortcuts);
   const activeProjectId = useTimerStore((s) => s.active_project_id);
   const activeTaskId = useTimerStore((s) => s.active_task_id);
-  const setContext = useTimerStore((s) => s.setContext);
   const sessionFocusSeconds = useTimerStore((s) => s.session_focus_seconds);
   const sessionPhases = useTimerStore((s) => s.session_phases_completed);
+  const sessionFinished = useTimerStore((s) => s.session_phases_finished);
 
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -105,7 +112,7 @@ export function TimerPage() {
             <FocusingOnBar
               projectName={displayName}
               projectColor={displayColor}
-              onSelectProject={setContext}
+              onSelectProject={timerSetContext}
               selectedProjectId={activeProjectId}
               selectedTaskId={activeTaskId}
             />
@@ -174,7 +181,7 @@ export function TimerPage() {
       <SessionCompleteOverlay
         open={status === 'session_complete' && !overlayDismissed}
         focusSeconds={sessionFocusSeconds}
-        phasesCompleted={sessionPhases}
+        phasesCompleted={sessionFinished}
         totalPhases={totalPhases}
         projectName={activeProject?.name}
         onStartNew={() => timerPlay()}

@@ -12,6 +12,7 @@ import { AuthContext } from './authContext';
 import { useTimerStore } from '@/stores/timerStore';
 import { stopAmbient } from '@/lib/ambient';
 import { stopLofi } from '@/stores/lofiStore';
+import { timerFlushBeforeLogout } from '@/lib/timerController';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -42,6 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // this device: the running timer, audio, and Firestore's offline cache.
     stopAmbient();
     stopLofi();
+    await timerFlushBeforeLogout();
     useTimerStore.getState().resetForUser(null);
     await signOut(getFirebaseAuth());
     await resetFirestore();

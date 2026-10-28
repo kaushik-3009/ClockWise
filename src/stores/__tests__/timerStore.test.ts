@@ -45,7 +45,7 @@ describe('timerStore', () => {
   });
 
   it('completes a phase at its exact end time and records it', () => {
-    store().setContext('p1', 't1');
+    store().setContext('p1', 't1', T0);
     store().play(T0);
     const fx = store().tick(T0 + 26 * MIN);
     expect(fx.finished).toEqual(['focus']);
@@ -113,7 +113,7 @@ describe('timerStore', () => {
   });
 
   it('reset keeps partial focus time and returns to a fresh session', () => {
-    store().setContext('p1');
+    store().setContext('p1', undefined, T0);
     store().play(T0);
     const fx = store().reset(T0 + (MIN_RECORD_SECONDS + 30) * 1000);
     expect(fx.records).toHaveLength(1);
@@ -148,11 +148,76 @@ describe('timerStore', () => {
   });
 
   it('a different account starts with a fresh timer', () => {
-    store().setContext('p1');
+    store().setContext('p1', undefined, T0);
     store().play(T0);
     store().resetForUser('u2');
     expect(store().owner_uid).toBe('u2');
     expect(store().status).toBe('idle');
     expect(store().active_project_id).toBeUndefined();
+  });
+
+  it('picking a project after starting credits the whole phase to it', () => {
+    store().play(T0);
+    store().setContext('p1', undefined, T0 + 5 * MIN);
+    const fx = store().tick(T0 + 25 * MIN);
+    expect(fx.records).toHaveLength(1);
+    expect(fx.records[0]).toMatchObject({
+      project_id: 'p1',
+      duration_seconds: 1500,
+      started_at: T0,
+    });
+  });
+
+  it('switching project mid-phase splits the time between them', () => {
+    store().setContext('a', undefined, T0);
+    store().play(T0);
+    const split = store().setContext('b', undefined, T0 + 10 * MIN);
+    expect(split.records).toHaveLength(1);
+    expect(split.records[0]).toMatchObject({
+      project_id: 'a',
+      duration_seconds: 600,
+      completed: false,
+    });
+    const fx = store().tick(T0 + 25 * MIN);
+    expect(fx.records[0]).toMatchObject({
+      project_id: 'b',
+      duration_seconds: 900,
+      started_at: T0 + 10 * MIN,
+      completed: true,
+    });
+    expect(store().session_focus_seconds).toBe(1500);
+  });
+
+  it('breaks are not attributed to a project', () => {
+    store().setContext('a', undefined, T0);
+    store().play(T0);
+    store().tick(T0 + 25 * MIN);
+    store().play(T0 + 25 * MIN);
+    const fx = store().tick(T0 + 31 * MIN);
+    expect(fx.records[0]).toMatchObject({ type: 'short_break', project_id: undefined });
+  });
+
+  it('a phase skipped after a long pause ends when it was paused', () => {
+    store().play(T0);
+    store().pause(T0 + 10 * MIN);
+    const fx = store().skip(T0 + 5 * 60 * MIN);
+    expect(fx.records[0]).toMatchObject({ ended_at: T0 + 10 * MIN, duration_seconds: 600 });
+  });
+
+  it('counts finished phases separately from skipped ones', () => {
+    setup({ phases_per_session: 2 });
+    store().play(T0);
+    store().skip(T0 + 5 * MIN);
+    store().play(T0 + 5 * MIN);
+    store().tick(T0 + 11 * MIN);
+    expect(store().status).toBe('session_complete');
+    expect(store().session_phases_completed).toBe(2);
+    expect(store().session_phases_finished).toBe(1);
+  });
+
+  it('reports when the last phase finished so stale chimes can be skipped', () => {
+    store().play(T0);
+    const fx = store().tick(T0 + 3 * 60 * MIN);
+    expect(fx.lastFinishedAt).toBe(T0 + 25 * MIN);
   });
 });

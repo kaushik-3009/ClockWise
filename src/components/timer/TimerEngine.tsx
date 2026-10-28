@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { useTimerStore } from '@/stores/timerStore';
 import { useAuth } from '@/lib/useAuth';
+import { useData } from '@/hooks/useData';
+import { timerSetContext } from '@/lib/timerController';
 import { useUiStore } from '@/stores/uiStore';
 import { timerTick } from '@/lib/timerController';
 import { playAmbient, stopAmbient, installAudioUnlock } from '@/lib/ambient';
@@ -23,6 +25,23 @@ export function TimerEngine() {
   const ambient = useTimerStore((s) => s.settings.ambient_sound);
   const ambientVolume = useTimerStore((s) => s.settings.ambient_volume);
   const keepAwake = useTimerStore((s) => s.settings.keep_screen_awake);
+
+  // Keep the "focusing on" selection valid: drop a project that was deleted or
+  // archived, or a task that was deleted or completed (time already spent stays
+  // with them).
+  const { projects, tasks, loading } = useData();
+  const activeProjectId = useTimerStore((s) => s.active_project_id);
+  const activeTaskId = useTimerStore((s) => s.active_task_id);
+  useEffect(() => {
+    if (loading.projects || loading.tasks) return;
+    const project = activeProjectId ? projects.find((p) => p.id === activeProjectId) : undefined;
+    const task = activeTaskId ? tasks.find((t) => t.id === activeTaskId) : undefined;
+    const projectGone =
+      activeProjectId !== undefined && (!project || project.status === 'archived');
+    const taskGone = activeTaskId !== undefined && (!task || task.is_completed);
+    if (projectGone) timerSetContext(undefined, undefined);
+    else if (taskGone) timerSetContext(activeProjectId, undefined);
+  }, [projects, tasks, loading.projects, loading.tasks, activeProjectId, activeTaskId]);
 
   // A timer saved by a different account on this device is discarded.
   useEffect(() => {

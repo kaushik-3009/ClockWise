@@ -35,6 +35,8 @@ export interface TimerEffects {
   records: PhaseRecord[];
   /** Phases that ran to the end (not skipped/reset) — these chime and notify. */
   finished: PhaseType[];
+  /** When the most recent of `finished` ended (to skip stale chimes after a long absence). */
+  lastFinishedAt: number | null;
   sessionComplete: boolean;
   warn: boolean;
 }
@@ -56,9 +58,24 @@ export interface TimerData {
   remaining_seconds: number;
   elapsed_seconds: number;
   session_focus_seconds: number;
+  /** Phases passed in this session (finished, skipped or reset). */
   session_phases_completed: number;
+  /** Phases that ran to the end in this session. */
+  session_phases_finished: number;
+  /** What the user has selected in the "I'm focusing on" picker. */
   active_project_id?: string;
   active_task_id?: string;
+  /**
+   * What the current stretch of this phase is being recorded against. Captured
+   * when the phase starts (or adopted if nothing was selected yet), so switching
+   * project mid-phase can't move time that was already spent on another one.
+   */
+  rec_project_id?: string;
+  rec_task_id?: string;
+  /** Elapsed ms of this phase already written out by a mid-phase project switch. */
+  segment_offset_ms: number;
+  /** When the phase was paused (its real end if it's then skipped or reset). */
+  paused_at: number | null;
   /** The account this timer belongs to; a different sign-in starts fresh. */
   owner_uid: string | null;
   warned: boolean;
@@ -72,7 +89,11 @@ interface TimerActions {
   tick: (now: number) => TimerEffects;
   skip: (now: number) => TimerEffects;
   reset: (now: number) => TimerEffects;
-  setContext: (projectId?: string, taskId?: string) => void;
+  setContext: (
+    projectId: string | undefined,
+    taskId: string | undefined,
+    now: number
+  ) => TimerEffects;
   setSettings: (settings: TimerSettings) => void;
   resetForUser: (uid: string | null) => void;
 }
@@ -82,6 +103,7 @@ export type TimerStore = TimerData & TimerActions;
 const noEffects = (): TimerEffects => ({
   records: [],
   finished: [],
+  lastFinishedAt: null,
   sessionComplete: false,
   warn: false,
 });
@@ -97,6 +119,8 @@ function phaseFields(plan: Phase[], index: number, startAt: number | null) {
     accumulated_ms: 0,
     running_since: startAt,
     phase_started_at: startAt,
+    segment_offset_ms: 0,
+    paused_at: null,
     remaining_seconds: duration,
     elapsed_seconds: 0,
     warned: false,
@@ -110,6 +134,7 @@ function freshSession(settings: TimerSettings, startAt: number | null) {
     plan,
     session_focus_seconds: 0,
     session_phases_completed: 0,
+    session_phases_finished: 0,
     ...phaseFields(plan, 0, startAt),
   };
 }
@@ -143,6 +168,7 @@ function derived(s: TimerData, now: number) {
 }
 
 function makeRecord(s: TimerData, endedAt: number, seconds: number, completed: boolean) {
+  const focus = s.phase_type === 'focus';
   return {
     type: s.phase_type,
     phase_number: s.phase_number,
@@ -150,16 +176,28 @@ function makeRecord(s: TimerData, endedAt: number, seconds: number, completed: b
     ended_at: endedAt,
     duration_seconds: seconds,
     completed,
-    project_id: s.active_project_id,
-    task_id: s.active_task_id,
+    // Breaks aren't work on a project.
+    project_id: focus ? s.rec_project_id : undefined,
+    task_id: focus ? s.rec_task_id : undefined,
   } satisfies PhaseRecord;
 }
 
+/** Seconds of the current phase not yet written out (after any mid-phase split). */
+function unrecordedSeconds(s: TimerData, now: number): number {
+  return Math.floor(Math.max(0, elapsedMs(s, now) - s.segment_offset_ms) / 1000);
+}
+
+/** Record context for a phase that's starting now. */
+function startContext(s: TimerData) {
+  return { rec_project_id: s.active_project_id, rec_task_id: s.active_task_id };
+}
+
 /** Close the current phase at `at` and move to the next one (or finish the session). */
-function advance(s: TimerData, at: number, focusSeconds: number): TimerData {
+function advance(s: TimerData, at: number, focusSeconds: number, finished: boolean): TimerData {
   const session_focus_seconds =
     s.session_focus_seconds + (s.phase_type === 'focus' ? focusSeconds : 0);
   const session_phases_completed = s.session_phases_completed + 1;
+  const session_phases_finished = s.session_phases_finished + (finished ? 1 : 0);
   const nextIndex = s.phase_number; // phase_number is 1-based
 
   if (nextIndex >= s.plan.length) {
@@ -168,6 +206,7 @@ function advance(s: TimerData, at: number, focusSeconds: number): TimerData {
       status: 'session_complete',
       session_focus_seconds,
       session_phases_completed,
+      session_phases_finished,
       running_since: null,
       accumulated_ms: 0,
       remaining_seconds: 0,
@@ -180,8 +219,10 @@ function advance(s: TimerData, at: number, focusSeconds: number): TimerData {
     ...s,
     session_focus_seconds,
     session_phases_completed,
+    session_phases_finished,
     status: autoStart ? 'running' : 'idle',
     ...phaseFields(s.plan, nextIndex, autoStart ? at : null),
+    ...(autoStart ? startContext(s) : {}),
   };
 }
 
@@ -189,10 +230,19 @@ export const initialTimerData = (settings: TimerSettings = DEFAULT_SETTINGS): Ti
   ...freshSession(settings, null),
   active_project_id: undefined,
   active_task_id: undefined,
+  rec_project_id: undefined,
+  rec_task_id: undefined,
   owner_uid: null,
   clock_now: Date.now(),
   settings,
 });
+
+const OPTIONAL_IDS = [
+  'active_project_id',
+  'active_task_id',
+  'rec_project_id',
+  'rec_task_id',
+] as const;
 
 export const useTimerStore = create<TimerStore>()(
   persist(
@@ -204,13 +254,16 @@ export const useTimerStore = create<TimerStore>()(
         if (s.status === 'running') return noEffects();
         if (s.status === 'session_complete') {
           // "Start new session" — always begins with a focus phase.
-          set({ ...freshSession(s.settings, now), clock_now: now });
+          set({ ...freshSession(s.settings, now), ...startContext(s), clock_now: now });
           return noEffects();
         }
+        const starting = s.phase_started_at === null;
         set({
           status: 'running',
           running_since: now,
           phase_started_at: s.phase_started_at ?? now,
+          paused_at: null,
+          ...(starting ? startContext(s) : {}),
           clock_now: now,
         });
         return noEffects();
@@ -225,6 +278,7 @@ export const useTimerStore = create<TimerStore>()(
         if (after.status !== 'running' || after.running_since === null) return fx;
         set({
           status: 'paused',
+          paused_at: now,
           accumulated_ms: elapsedMs(after, now),
           running_since: null,
           ...derived({ ...after, accumulated_ms: elapsedMs(after, now), running_since: null }, now),
@@ -245,9 +299,11 @@ export const useTimerStore = create<TimerStore>()(
           const durationMs = s.phase_duration_seconds * 1000;
           if (elapsedMs(s, now) < durationMs) break;
           const endedAt = s.running_since + (durationMs - s.accumulated_ms);
-          fx.records.push(makeRecord(s, endedAt, s.phase_duration_seconds, true));
+          const seconds = s.phase_duration_seconds - Math.floor(s.segment_offset_ms / 1000);
+          fx.records.push(makeRecord(s, endedAt, seconds, true));
           fx.finished.push(s.phase_type);
-          s = advance(s, endedAt, s.phase_duration_seconds);
+          fx.lastFinishedAt = endedAt;
+          s = advance(s, endedAt, s.phase_duration_seconds, true);
           if (s.status === 'session_complete') fx.sessionComplete = true;
         }
 
@@ -274,9 +330,13 @@ export const useTimerStore = create<TimerStore>()(
         if (s.status === 'session_complete') return fx;
         if (s.status === 'idle' && s.phase_number === 1 && s.accumulated_ms === 0) return fx;
 
-        const seconds = Math.floor(elapsedMs(s, now) / 1000);
-        if (seconds >= MIN_RECORD_SECONDS) fx.records.push(makeRecord(s, now, seconds, false));
-        const next = advance(s, now, seconds);
+        // A paused phase really ended when it was paused, not now.
+        const endedAt = s.status === 'paused' && s.paused_at !== null ? s.paused_at : now;
+        const seconds = unrecordedSeconds(s, now);
+        const kept = seconds >= MIN_RECORD_SECONDS;
+        if (kept) fx.records.push(makeRecord(s, endedAt, seconds, false));
+        const focusSoFar = Math.floor(s.segment_offset_ms / 1000) + (kept ? seconds : 0);
+        const next = advance(s, now, focusSoFar, false);
         if (next.status === 'session_complete') fx.sessionComplete = true;
         set({ ...next, ...derived(next, now) });
         return fx;
@@ -286,16 +346,45 @@ export const useTimerStore = create<TimerStore>()(
         const fx = get().tick(now);
         const s = get();
         if (s.status === 'running' || s.status === 'paused') {
-          const seconds = Math.floor(elapsedMs(s, now) / 1000);
+          const endedAt = s.status === 'paused' && s.paused_at !== null ? s.paused_at : now;
+          const seconds = unrecordedSeconds(s, now);
           // Keep partial focus time — abandoning a phase shouldn't erase real work.
-          if (seconds >= MIN_RECORD_SECONDS) fx.records.push(makeRecord(s, now, seconds, false));
+          if (seconds >= MIN_RECORD_SECONDS)
+            fx.records.push(makeRecord(s, endedAt, seconds, false));
         }
         set({ ...freshSession(s.settings, null), clock_now: now });
         return fx;
       },
 
-      setContext: (projectId, taskId) =>
-        set({ active_project_id: projectId, active_task_id: taskId }),
+      setContext: (projectId, taskId, now) => {
+        const fx = get().tick(now);
+        const s = get();
+        const update: Partial<TimerData> = { active_project_id: projectId, active_task_id: taskId };
+        const inPhase =
+          (s.status === 'running' || s.status === 'paused') && s.phase_started_at !== null;
+        const changed = s.rec_project_id !== projectId || s.rec_task_id !== taskId;
+        if (inPhase && changed) {
+          if (s.rec_project_id === undefined && s.rec_task_id === undefined) {
+            // Started without choosing anything: the whole phase counts for the choice.
+            update.rec_project_id = projectId;
+            update.rec_task_id = taskId;
+          } else {
+            // Switching mid-phase: write the time so far to the previous choice.
+            const seconds = unrecordedSeconds(s, now);
+            if (s.phase_type === 'focus' && seconds >= MIN_RECORD_SECONDS) {
+              const endedAt = s.status === 'paused' && s.paused_at !== null ? s.paused_at : now;
+              fx.records.push(makeRecord(s, endedAt, seconds, false));
+              update.segment_offset_ms = elapsedMs(s, now);
+              update.phase_started_at = s.status === 'paused' ? null : now;
+              // session_focus_seconds is added when the phase ends (it includes the offset).
+            }
+            update.rec_project_id = projectId;
+            update.rec_task_id = taskId;
+          }
+        }
+        set(update);
+        return fx;
+      },
 
       setSettings: (settings) => {
         const s = get();
@@ -321,15 +410,23 @@ export const useTimerStore = create<TimerStore>()(
         // state changes (which is what other open tabs sync on).
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { settings, clock_now, remaining_seconds, elapsed_seconds, ...rest } = s;
-        return Object.fromEntries(
+        const out = Object.fromEntries(
           Object.entries(rest).filter(([, v]) => typeof v !== 'function')
-        ) as Partial<TimerData>;
+        ) as Record<string, unknown>;
+        // JSON drops undefined, and a missing key would keep the other tab's old
+        // value on merge — store "nothing selected" explicitly as null.
+        for (const k of OPTIONAL_IDS) out[k] = s[k] ?? null;
+        return out as Partial<TimerData>;
       },
       // Drop anything that doesn't look like a valid saved timer.
       merge: (persisted, current) => {
         const p = persisted as Partial<TimerData> | undefined;
         if (!p || !Array.isArray(p.plan) || p.plan.length === 0) return current;
-        const merged = { ...current, ...p, settings: current.settings };
+        const merged = { ...current, ...p, settings: current.settings } as TimerStore;
+        for (const k of OPTIONAL_IDS) merged[k] = merged[k] ?? undefined;
+        merged.segment_offset_ms ??= 0;
+        merged.paused_at ??= null;
+        merged.session_phases_finished ??= merged.session_phases_completed ?? 0;
         return { ...merged, ...derived(merged, Date.now()) };
       },
     }

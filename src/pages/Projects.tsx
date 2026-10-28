@@ -5,7 +5,7 @@ import { useProjects } from '@/hooks/useProjects';
 import { useTasks } from '@/hooks/useTasks';
 import { useSessions } from '@/hooks/useSessions';
 import { usePageTitle } from '@/hooks/usePageTitle';
-import { useTimerStore } from '@/stores/timerStore';
+import { timerSetContext } from '@/lib/timerController';
 import { ProjectCard } from '@/components/projects/ProjectCard';
 import { TaskRow } from '@/components/projects/TaskRow';
 import { ProjectForm } from '@/components/projects/ProjectForm';
@@ -70,7 +70,6 @@ export function ProjectsPage() {
     setCompleted,
   } = useTasks();
   const { sessions } = useSessions();
-  const setTimerContext = useTimerStore((s) => s.setContext);
 
   const projectTotals = useMemo(() => focusSecondsBy(sessions, (s) => s.project_id), [sessions]);
   const taskTotals = useMemo(() => focusSecondsBy(sessions, (s) => s.task_id), [sessions]);
@@ -92,7 +91,7 @@ export function ProjectsPage() {
   const visibleTasks = showDone ? [...openTasks, ...doneTasks] : openTasks;
 
   const focusOn = (projectId?: string, taskId?: string) => {
-    setTimerContext(projectId, taskId);
+    timerSetContext(projectId, taskId);
     navigate('/timer');
   };
 

@@ -44,7 +44,7 @@ export function SessionCompleteOverlay({
             <dd className="font-display text-2xl font-bold text-text-base">
               {phasesCompleted} of {totalPhases}
             </dd>
-            <dt className="mt-1 text-xs text-text-sub">Phases done</dt>
+            <dt className="mt-1 text-xs text-text-sub">Phases finished</dt>
           </div>
         </dl>
 
