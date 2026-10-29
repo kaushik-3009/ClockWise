@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useSessions } from '@/hooks/useSessions';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { HeatmapCalendar } from '@/components/stats/HeatmapCalendar';
@@ -21,10 +21,18 @@ import { periodFor, previousPeriod } from '@/lib/period';
 
 export function StreaksPage() {
   usePageTitle('Streaks');
-  const { sessions, loading } = useSessions();
+  const { sessions, loading, sessionsSince, loadOlderSessions } = useSessions();
 
   const currentStreak = useMemo(() => computeCurrentStreak(sessions), [sessions]);
   const longestStreak = useMemo(() => computeLongestStreak(sessions), [sessions]);
+
+  // Only ~13 months of sessions are loaded by default. If the current streak
+  // reaches back to the start of that window, load older history so the count
+  // isn't cut off.
+  const daysLoaded = Math.floor((Date.now() - sessionsSince) / 86_400_000);
+  useEffect(() => {
+    if (!loading && currentStreak > 0 && currentStreak >= daysLoaded - 1) loadOlderSessions();
+  }, [loading, currentStreak, daysLoaded, loadOlderSessions]);
   const bestMonth = useMemo(() => computeBestMonth(sessions), [sessions]);
   const activeThisMonth = useMemo(() => computeActiveDaysThisMonth(sessions), [sessions]);
 
@@ -73,8 +81,8 @@ export function StreaksPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
-        <div className="order-2 flex flex-col gap-4 lg:order-1">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="order-2 flex min-w-0 flex-col gap-4 lg:order-1">
           <section className="rounded-2xl border border-border-base bg-bg-card p-4 sm:p-6">
             <HeatmapCalendar />
           </section>
@@ -85,7 +93,7 @@ export function StreaksPage() {
           <StatsList
             rows={[
               {
-                label: 'Longest streak',
+                label: `Longest streak (since ${new Date(sessionsSince).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })})`,
                 value: `${longestStreak} ${longestStreak === 1 ? 'day' : 'days'}`,
               },
               {
@@ -98,7 +106,7 @@ export function StreaksPage() {
             ]}
           />
           <p className="px-1 text-xs font-semibold">
-            <DeltaBadge delta={month.delta} comparedTo="this point last month" />
+            Focus this month: <DeltaBadge delta={month.delta} comparedTo="this point last month" />
           </p>
         </div>
       </div>

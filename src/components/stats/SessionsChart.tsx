@@ -65,7 +65,7 @@ export function SessionsChart({ data, highlightDay, subtitle, className }: Sessi
         className
       )}
     >
-      <h3 className="text-md font-semibold text-text-base">Focus sessions</h3>
+      <h2 className="text-md font-semibold text-text-base">Focus sessions</h2>
       <p className="text-xs text-text-sub mt-0.5 mb-4">{subtitle ?? 'Started vs finished'}</p>
       {data.length === 0 || data.every((d) => !d.started && !d.completed) ? (
         <div className="flex h-[220px] items-center justify-center text-sm text-text-muted">

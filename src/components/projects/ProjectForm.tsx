@@ -69,7 +69,7 @@ export function ProjectForm({ open, onClose, onSubmit, initialData }: ProjectFor
             className="field"
           />
           {error && (
-            <p id={`${ids}-err`} className="text-xs text-error-text">
+            <p id={`${ids}-err`} role="alert" className="text-xs text-error-text">
               {error}
             </p>
           )}

@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useToday } from '@/hooks/useToday';
 
 export type Granularity = 'day' | 'week' | 'month';
 
@@ -37,11 +38,20 @@ export function periodFor(g: Granularity, date: Date): Period {
 export function previousPeriod(g: Granularity, current: Period, now = new Date()): Period {
   const prev = periodFor(g, shift(g, current.start, -1));
   if (now >= current.start && now <= current.end) {
-    const elapsed = now.getTime() - current.start.getTime();
-    return {
-      start: prev.start,
-      end: new Date(Math.min(prev.start.getTime() + elapsed, prev.end.getTime())),
-    };
+    // Same wall-clock moment in the previous period (calendar arithmetic, so a
+    // DST change in between doesn't shift it by an hour). Months clamp to the
+    // shorter month's last day.
+    const same = new Date(now);
+    if (g === 'day') same.setDate(same.getDate() - 1);
+    if (g === 'week') same.setDate(same.getDate() - 7);
+    if (g === 'month') {
+      const day = same.getDate();
+      same.setDate(1);
+      same.setMonth(same.getMonth() - 1);
+      const last = new Date(same.getFullYear(), same.getMonth() + 1, 0).getDate();
+      same.setDate(Math.min(day, last));
+    }
+    return { start: prev.start, end: new Date(Math.min(same.getTime(), prev.end.getTime())) };
   }
   return prev;
 }
@@ -72,12 +82,24 @@ export function usePeriod(initial: Granularity = 'week') {
   const [granularity, setGranularityState] = useState<Granularity>(initial);
   const [anchor, setAnchor] = useState(() => new Date());
 
+  // If the user is looking at the current period when the day rolls over, follow
+  // the clock into the new day/week/month.
+  const todayKey = useToday();
+  const lastToday = useRef(todayKey);
+  useEffect(() => {
+    if (lastToday.current === todayKey) return;
+    const wasCurrent = periodFor(granularity, new Date(Date.now() - 86_400_000));
+    if (anchor >= wasCurrent.start && anchor <= wasCurrent.end) setAnchor(new Date());
+    lastToday.current = todayKey;
+  }, [todayKey, granularity, anchor]);
+
   const period = useMemo(() => periodFor(granularity, anchor), [granularity, anchor]);
   const previous = useMemo(() => previousPeriod(granularity, period), [granularity, period]);
   const isCurrent = useMemo(() => {
     const now = new Date();
     return now >= period.start && now <= period.end;
-  }, [period]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-evaluate when the day changes
+  }, [period, todayKey]);
 
   const setGranularity = useCallback((g: Granularity) => {
     setGranularityState(g);

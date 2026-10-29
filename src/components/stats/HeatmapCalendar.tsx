@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { rovingKeyDown } from '@/lib/roving';
 import { useSessions } from '@/hooks/useSessions';
 import { groupFocusSessionsByDay, getHeatmapIntensityLevel, HEATMAP_GREEN } from '@/lib/stats';
 import { formatDateKey, formatDuration } from '@/lib/time';
@@ -97,7 +98,7 @@ export function HeatmapCalendar() {
 
     const firstDayOfMonth = new Date(year, month, 1);
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const startDayOfWeek = firstDayOfMonth.getDay();
+    const startDayOfWeek = (firstDayOfMonth.getDay() + 6) % 7; // Monday first
 
     const padStart = startDayOfWeek;
     const totalCells = padStart + daysInMonth;
@@ -158,7 +159,7 @@ export function HeatmapCalendar() {
     const year = currentMonth.getFullYear();
 
     const jan1 = new Date(year, 0, 1);
-    const startDay = jan1.getDay(); // 0=Sun
+    const startDay = (jan1.getDay() + 6) % 7; // rows start on Monday
     const dec31 = new Date(year, 11, 31);
     const daysInYear =
       Math.round((Date.UTC(year, 11, 31) - Date.UTC(year, 0, 1)) / (1000 * 60 * 60 * 24)) + 1;
@@ -230,7 +231,7 @@ export function HeatmapCalendar() {
     return { rows, monthLabels, cols, year };
   }, [sessions, currentMonth, viewMode]);
 
-  const dayNamesShort = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+  const dayNamesShort = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
   const handleCellEnter = (day: { date: string; focusSeconds: number }, e: React.MouseEvent) => {
     if (!day.date) return;
@@ -255,7 +256,7 @@ export function HeatmapCalendar() {
       {/* Header */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-md font-semibold text-text-base">Activity</h3>
+          <h2 className="text-md font-semibold text-text-base">Activity</h2>
           <p className="text-xs text-text-sub">
             Focus time per day. Tap a day to see its sessions.
           </p>
@@ -270,6 +271,8 @@ export function HeatmapCalendar() {
               type="button"
               role="radio"
               aria-checked={viewMode === 'month'}
+              tabIndex={viewMode === 'month' ? 0 : -1}
+              onKeyDown={rovingKeyDown}
               onClick={() => setViewMode('month')}
               className={cn(
                 'min-h-11 px-3 text-sm font-medium transition-colors',
@@ -284,6 +287,8 @@ export function HeatmapCalendar() {
               type="button"
               role="radio"
               aria-checked={viewMode === 'year'}
+              tabIndex={viewMode === 'year' ? 0 : -1}
+              onKeyDown={rovingKeyDown}
               onClick={() => setViewMode('year')}
               className={cn(
                 'min-h-11 px-3 text-sm font-medium transition-colors',
@@ -368,7 +373,7 @@ export function HeatmapCalendar() {
                 onMouseLeave={handleCellLeave}
                 onClick={() => handleCellClick(day)}
                 className={cn(
-                  'aspect-square rounded-md transition-all duration-fast flex items-center justify-center text-2xs font-medium',
+                  'aspect-square rounded-md transition-all duration-fast flex items-center justify-center text-xs font-semibold',
                   day.isPadding && 'invisible',
                   !day.isPadding && 'cursor-pointer hover:scale-105'
                 )}
@@ -396,7 +401,14 @@ export function HeatmapCalendar() {
       ) : (
         /* ── YEARLY VIEW ──────────────────────── */
         yearData && (
-          <div className="w-full overflow-x-auto">
+          <div
+            className="w-full overflow-x-auto"
+            ref={(el) => {
+              // On narrow screens, open scrolled to the current month rather than January.
+              if (!el || yearData.year !== now.getFullYear()) return;
+              el.scrollLeft = el.scrollWidth * (now.getMonth() / 12) - el.clientWidth / 2;
+            }}
+          >
             <div className="min-w-[640px]">
               {/* Month labels — matching N-column grid */}
               <div
@@ -434,7 +446,9 @@ export function HeatmapCalendar() {
                       key={idx}
                       type="button"
                       disabled={day.isPadding}
-                      tabIndex={day.isPadding ? -1 : undefined}
+                      // 365 tab stops would trap keyboard users; the month view is
+                      // the keyboard path, and screen readers can still browse these.
+                      tabIndex={-1}
                       aria-label={
                         day.isPadding
                           ? undefined

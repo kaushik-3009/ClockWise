@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { rovingKeyDown } from '@/lib/roving';
 import {
   ChevronUp,
   CloudRain,
@@ -206,6 +207,8 @@ export function MusicPlayer() {
                 type="button"
                 role="tab"
                 aria-selected={tab === t}
+                tabIndex={tab === t ? 0 : -1}
+                onKeyDown={rovingKeyDown}
                 onClick={() => setTab(t)}
                 className={cn(
                   'h-9 flex-1 rounded-full text-sm font-medium transition-colors',

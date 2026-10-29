@@ -226,6 +226,35 @@ function advance(s: TimerData, at: number, focusSeconds: number, finished: boole
   };
 }
 
+const STATUSES: TimerStatus[] = ['idle', 'running', 'paused', 'session_complete'];
+const isCount = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+const isTime = (v: unknown) => v === null || isCount(v);
+
+/** A saved timer from localStorage is only restored if its core fields make sense. */
+function looksValid(p: Partial<TimerData>): boolean {
+  return (
+    Array.isArray(p.plan) &&
+    p.plan.length > 0 &&
+    p.plan.every(
+      (ph) =>
+        ph &&
+        (ph.type === 'focus' || ph.type === 'short_break' || ph.type === 'long_break') &&
+        isCount(ph.duration_minutes) &&
+        ph.duration_minutes > 0
+    ) &&
+    STATUSES.includes(p.status as TimerStatus) &&
+    Number.isInteger(p.phase_number) &&
+    p.phase_number! >= 1 &&
+    p.phase_number! <= p.plan.length &&
+    isCount(p.phase_duration_seconds) &&
+    isCount(p.accumulated_ms) &&
+    isTime(p.running_since) &&
+    isTime(p.phase_started_at) &&
+    isCount(p.session_focus_seconds) &&
+    isCount(p.session_phases_completed)
+  );
+}
+
 export const initialTimerData = (settings: TimerSettings = DEFAULT_SETTINGS): TimerData => ({
   ...freshSession(settings, null),
   active_project_id: undefined,
@@ -421,11 +450,12 @@ export const useTimerStore = create<TimerStore>()(
       // Drop anything that doesn't look like a valid saved timer.
       merge: (persisted, current) => {
         const p = persisted as Partial<TimerData> | undefined;
-        if (!p || !Array.isArray(p.plan) || p.plan.length === 0) return current;
+        if (!p || !looksValid(p)) return current;
         const merged = { ...current, ...p, settings: current.settings } as TimerStore;
         for (const k of OPTIONAL_IDS) merged[k] = merged[k] ?? undefined;
         merged.segment_offset_ms ??= 0;
         merged.paused_at ??= null;
+        merged.total_phases = merged.plan.length;
         merged.session_phases_finished ??= merged.session_phases_completed ?? 0;
         return { ...merged, ...derived(merged, Date.now()) };
       },

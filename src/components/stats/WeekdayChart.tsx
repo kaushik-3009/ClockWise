@@ -11,6 +11,9 @@ interface WeekdayChartProps {
   className?: string;
 }
 
+/** data is Sunday-first (Date#getDay); display Monday-first like the rest of the app. */
+const MONDAY_FIRST = [1, 2, 3, 4, 5, 6, 0];
+
 export function WeekdayChart({ data, insight, className }: WeekdayChartProps) {
   const max = Math.max(...data.map((d) => d.seconds), 1);
   const shortNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -36,7 +39,8 @@ export function WeekdayChart({ data, insight, className }: WeekdayChartProps) {
       ) : (
         <>
           <div className="flex items-end gap-2 sm:gap-3 flex-1 min-h-[180px] pt-2">
-            {data.map((day, i) => {
+            {MONDAY_FIRST.map((i) => {
+              const day = data[i];
               const pct = (day.seconds / max) * 100;
               const hours = (day.seconds / 3600).toFixed(1);
               const isZero = day.seconds === 0;

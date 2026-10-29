@@ -57,7 +57,7 @@ export function FocusVsBreakDonut({
 
   return (
     <div className={cn('bg-bg-card border border-border-base rounded-md p-5 px-6', className)}>
-      <h3 className="text-md font-semibold text-text-base">Focus vs breaks</h3>
+      <h2 className="text-md font-semibold text-text-base">Focus vs breaks</h2>
       <p className="text-xs text-text-sub mt-0.5 mb-4">Time distribution</p>
       {total === 0 ? (
         <div className="flex items-center justify-center h-[200px] text-sm text-text-muted">

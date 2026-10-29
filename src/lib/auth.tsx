@@ -20,9 +20,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const auth = getFirebaseAuth();
-    return onAuthStateChanged(auth, (currentUser) => {
+    let previousUid: string | null | undefined;
+    return onAuthStateChanged(auth, async (currentUser) => {
+      const uid = currentUser?.uid ?? null;
+      const switched = previousUid != null && uid !== null && uid !== previousUid;
+      const signedOut = previousUid != null && uid === null;
+      previousUid = uid;
+      // Signing out in another tab only reaches this tab through here, so wipe
+      // this tab's Firestore instance too; otherwise it keeps serving the previous
+      // account's cache. (After a sign-out the listeners unmount first.)
+      if (switched) await resetFirestore();
       setUser(currentUser);
       setLoading(false);
+      if (signedOut) void resetFirestore();
     });
   }, []);
 

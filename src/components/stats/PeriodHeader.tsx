@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { rovingKeyDown } from '@/lib/roving';
 import { cn } from '@/lib/cn';
 import type { Granularity } from '@/lib/period';
 
@@ -84,6 +85,8 @@ export function PeriodHeader({
             type="button"
             role="radio"
             aria-checked={granularity === opt.value}
+            tabIndex={granularity === opt.value ? 0 : -1}
+            onKeyDown={rovingKeyDown}
             onClick={() => onGranularityChange(opt.value)}
             className={cn(
               'min-h-11 px-4 text-sm font-medium transition-colors',

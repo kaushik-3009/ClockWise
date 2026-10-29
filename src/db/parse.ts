@@ -41,9 +41,20 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
   return n === undefined ? fallback : clamp(Math.round(n), min, max);
 }
 
-/** IDs become Firestore path segments, so they must be non-empty and slash-free. */
+/**
+ * IDs become Firestore path segments: non-empty, slash-free, and not one of the
+ * names Firestore reserves ('.', '..' and anything wrapped in double underscores).
+ */
 export function isValidId(id: unknown): id is string {
-  return typeof id === 'string' && id.length > 0 && id.length <= 128 && !id.includes('/');
+  return (
+    typeof id === 'string' &&
+    id.length > 0 &&
+    id.length <= 128 &&
+    !id.includes('/') &&
+    id !== '.' &&
+    id !== '..' &&
+    !/^__.*__$/.test(id)
+  );
 }
 
 export function parseProject(id: string, data: unknown): Project | null {
@@ -111,7 +122,7 @@ export function parseTemplate(id: string, data: unknown): TimerTemplate | null {
   return {
     id,
     user_id: str(data.user_id) ?? '',
-    name,
+    name: name.slice(0, 120),
     focus_minutes: clampInt(data.focus_minutes, 1, 180, d.focus_minutes),
     short_break_minutes: clampInt(data.short_break_minutes, 1, 60, d.short_break_minutes),
     long_break_minutes: clampInt(data.long_break_minutes, 1, 120, d.long_break_minutes),

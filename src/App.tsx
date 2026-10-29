@@ -24,8 +24,16 @@ import { LandingPage } from '@/pages/Landing';
 import { LoginPage } from '@/pages/Login';
 import { SignupPage } from '@/pages/Signup';
 
+// The vite:preloadError handler in main.tsx swallows a failed chunk load, which
+// leaves the module undefined; turn that back into a chunk error so the error
+// boundaries offer the reload instead of crashing on `undefined[name]`.
 const page = <T extends string>(load: () => Promise<Record<T, React.ComponentType>>, name: T) =>
-  lazy(() => load().then((m) => ({ default: m[name] })));
+  lazy(() =>
+    load().then((m) => {
+      if (!m) throw new Error('ChunkLoadError: failed to load page module');
+      return { default: m[name] };
+    })
+  );
 
 const StatisticsPage = page(() => import('@/pages/Statistics'), 'StatisticsPage');
 const ProjectsPage = page(() => import('@/pages/Projects'), 'ProjectsPage');

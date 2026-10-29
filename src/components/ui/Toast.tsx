@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
@@ -63,16 +63,28 @@ export function reportFailure(promise: Promise<unknown>, message: string): void 
 
 function ToastItem({ toast: item }: { toast: Toast }) {
   const removeToast = useToastStore((s) => s.removeToast);
+  // Hold the toast while it's hovered or has keyboard focus, so it can't vanish
+  // while someone is reading it or reaching for its button.
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const held = hovered || focused;
 
   useEffect(() => {
+    if (held) return;
     // Errors and actionable toasts stay longer so they can be read and used.
     const ms = item.action ? 10000 : item.type === 'error' ? 7000 : 4000;
     const timer = setTimeout(() => removeToast(item.id), ms);
     return () => clearTimeout(timer);
-  }, [item.id, item.type, item.action, removeToast]);
+  }, [item.id, item.type, item.action, removeToast, held]);
 
   return (
     <div
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false);
+      }}
       className={cn(
         'pointer-events-auto flex items-center gap-3 rounded-lg py-2.5 pl-4 pr-2 text-sm font-medium shadow-modal',
         'animate-[slideUp_200ms_cubic-bezier(0.34,1.56,0.64,1)]',
@@ -89,7 +101,7 @@ function ToastItem({ toast: item }: { toast: Toast }) {
             item.action?.onClick();
             removeToast(item.id);
           }}
-          className="min-h-9 rounded-md px-3 font-semibold underline-offset-2 hover:underline"
+          className="min-h-11 rounded-md px-3 font-semibold underline-offset-2 hover:underline"
         >
           {item.action.label}
         </button>
@@ -97,7 +109,7 @@ function ToastItem({ toast: item }: { toast: Toast }) {
       <button
         type="button"
         onClick={() => removeToast(item.id)}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md opacity-70 hover:opacity-100"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md opacity-70 hover:opacity-100"
         aria-label="Dismiss notification"
       >
         <X className="h-4 w-4" />

@@ -52,9 +52,14 @@ export function FocusDistribution({
           const color = PROJECT_COLORS[item.color as keyof typeof PROJECT_COLORS];
           return (
             <div key={item.name}>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-sm font-bold text-text-base">{item.name}</span>
-                <span className="text-sm font-bold text-text-sub tabular-nums">
+              <div className="mb-1.5 flex items-center justify-between gap-3">
+                <span
+                  className="min-w-0 truncate text-sm font-bold text-text-base"
+                  title={item.name}
+                >
+                  {item.name}
+                </span>
+                <span className="shrink-0 text-sm font-bold tabular-nums text-text-sub">
                   {formatDuration(item.seconds)} ·{' '}
                   <span className="text-text-muted">{item.pct}%</span>
                 </span>

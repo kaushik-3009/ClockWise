@@ -87,9 +87,12 @@ export const TaskRow = memo(function TaskRow({
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-text-sub">
             {project && (
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
-                {project.name}
+              <span className="flex min-w-0 max-w-full items-center gap-1.5">
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: color }}
+                />
+                <span className="truncate">{project.name}</span>
               </span>
             )}
             <span>

@@ -20,6 +20,8 @@ export interface DataContextValue {
   sessionsSince: number;
   /** Widen the session window by another year (History "load older"). */
   loadOlderSessions: () => void;
+  /** Widen the session window to start no later than `ms` (never narrows it). */
+  ensureSessionsSince: (ms: number) => void;
 }
 
 export const DataContext = createContext<DataContextValue | null>(null);

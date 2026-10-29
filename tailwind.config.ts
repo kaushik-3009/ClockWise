@@ -1,6 +1,8 @@
 import type { Config } from 'tailwindcss';
 
 export default {
+  // Hover styles only apply on devices that can hover, so they don't stick after a tap.
+  future: { hoverOnlyWhenSupported: true },
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {

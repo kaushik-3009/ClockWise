@@ -53,6 +53,12 @@ export default defineConfig({
       workbox: {
         // Precache fonts too, so an offline launch still has its typography.
         globPatterns: ['**/*.{js,css,html,woff2,svg,ico}', 'pwa-*.png', 'apple-touch-icon.png'],
+        // Non-Latin subsets are only fetched (online) when such text appears; don't
+        // make every install download them.
+        globIgnores: ['**/*-{cyrillic,cyrillic-ext,greek,greek-ext,vietnamese}-*.woff2'],
+        // Control the very first page load too, so going offline in the first
+        // session still works. Updates still wait for the user (registerType: prompt).
+        clientsClaim: true,
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/__\/.*/, /\.[a-z0-9]+$/i],
         cleanupOutdatedCaches: true,

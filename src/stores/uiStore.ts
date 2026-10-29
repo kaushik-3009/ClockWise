@@ -46,7 +46,9 @@ export const useUiStore = create<UiState & UiActions>()(
 const systemDark = () => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
 
 export function resolveTheme(pref: ThemePreference): 'light' | 'dark' {
-  return pref === 'system' ? (systemDark() ? 'dark' : 'light') : pref;
+  // Anything else (e.g. a hand-edited localStorage value) is treated as 'system'.
+  if (pref === 'light' || pref === 'dark') return pref;
+  return systemDark() ? 'dark' : 'light';
 }
 
 /** Apply the theme to <html> and keep the browser chrome colour in sync. */

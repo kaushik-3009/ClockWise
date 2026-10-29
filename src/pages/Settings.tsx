@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useId } from 'react';
+import { rovingKeyDown } from '@/lib/roving';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, Monitor, Moon, Sun } from 'lucide-react';
 import {
@@ -150,14 +151,15 @@ function Segmented<T extends string>({
   options: { value: T; label: string; icon?: typeof Sun }[];
   onChange: (value: T) => void;
 }) {
+  const labelId = useId();
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-sm text-text-sub" id={`seg-${label}`}>
+      <span className="text-sm text-text-sub" id={labelId}>
         {label}
       </span>
       <div
         role="radiogroup"
-        aria-labelledby={`seg-${label}`}
+        aria-labelledby={labelId}
         className="flex overflow-hidden rounded-md border border-border-input"
       >
         {options.map((opt) => {
@@ -169,6 +171,8 @@ function Segmented<T extends string>({
               type="button"
               role="radio"
               aria-checked={selected}
+              tabIndex={selected ? 0 : -1}
+              onKeyDown={rovingKeyDown}
               onClick={() => onChange(opt.value)}
               className={cn(
                 'flex min-h-11 flex-1 items-center justify-center gap-1.5 px-2 text-sm font-medium transition-colors',
@@ -338,7 +342,7 @@ export function SettingsPage() {
             onCommit={(v) => save({ long_break_minutes: v })}
           />
           <NumberField
-            label="Phases per session"
+            label="Phases per session (focus + breaks)"
             min={1}
             max={24}
             value={settings.phases_per_session}

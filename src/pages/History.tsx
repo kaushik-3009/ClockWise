@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useDeferredValue } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -37,7 +37,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 function dayLabel(key: string): string {
   const today = formatDateKey(new Date());
-  const yesterday = formatDateKey(new Date(Date.now() - DAY_MS));
+  const yd = new Date();
+  yd.setDate(yd.getDate() - 1); // calendar arithmetic: correct across DST
+  const yesterday = formatDateKey(yd);
   const [y, m, d] = key.split('-').map(Number);
   const date = new Date(y, m - 1, d);
   const full = date.toLocaleDateString(undefined, {
@@ -69,6 +71,8 @@ export function HistoryPage() {
   const { allTasks } = useTasks();
 
   const [searchQuery, setSearchQuery] = useState('');
+  // Keeps typing responsive with thousands of sessions: the list catches up after.
+  const deferredQuery = useDeferredValue(searchQuery);
   const [projectFilter, setProjectFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -91,7 +95,7 @@ export function HistoryPage() {
     searchQuery.trim() !== '';
 
   const filteredSessions = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = deferredQuery.trim().toLowerCase();
     const cutoff = daysFilter === 'all' ? 0 : Date.now() - Number(daysFilter) * DAY_MS;
     return sessions.filter((s) => {
       if (s.started_at < cutoff) return false;
@@ -119,7 +123,7 @@ export function HistoryPage() {
     projectFilter,
     typeFilter,
     statusFilter,
-    searchQuery,
+    deferredQuery,
     projectMap,
     taskMap,
     dateParam,

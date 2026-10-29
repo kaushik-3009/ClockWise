@@ -141,11 +141,16 @@ export function SessionEditModal({
                   setStart(toLocalInput(Date.now() - m * 60_000));
               }}
               aria-invalid={Boolean(errors.minutes)}
+              aria-describedby={errors.minutes ? `${ids}-minutes-err` : undefined}
               className="field"
             />
           </div>
         </div>
-        {errors.minutes && <p className="-mt-2 text-xs text-error-text">{errors.minutes}</p>}
+        {errors.minutes && (
+          <p id={`${ids}-minutes-err`} className="-mt-2 text-xs text-error-text">
+            {errors.minutes}
+          </p>
+        )}
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor={`${ids}-start`} className="text-sm text-text-sub">
@@ -161,13 +166,18 @@ export function SessionEditModal({
               setStartTouched(true);
             }}
             aria-invalid={Boolean(errors.start)}
+            aria-describedby={`${ids}-start-hint`}
             className="field"
           />
           {errors.start ? (
-            <p className="text-xs text-error-text">{errors.start}</p>
+            <p id={`${ids}-start-hint`} className="text-xs text-error-text">
+              {errors.start}
+            </p>
           ) : (
             Number.isFinite(endMs) && (
-              <p className="text-xs text-text-muted">Ends at {formatTime(endMs)}</p>
+              <p id={`${ids}-start-hint`} className="text-xs text-text-muted">
+                Ends at {formatTime(endMs)}
+              </p>
             )
           )}
         </div>

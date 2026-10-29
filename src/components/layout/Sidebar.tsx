@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useToday } from '@/hooks/useToday';
 import { NavLink, Link, useLocation } from 'react-router-dom';
 import {
   Timer,
@@ -47,11 +48,17 @@ const itemClass = (collapsed: boolean, active = false) =>
 export function Sidebar() {
   const { sidebarCollapsed: collapsed, toggleSidebar, theme, setTheme } = useUiStore();
   const { settings } = useSettings();
-  const { sessions } = useSessions();
+  // The weekly goal only needs this week; don't make every page load a year of history.
+  const { sessions } = useSessions(undefined, 8);
   const { logOut } = useAuth();
   const onTimerPage = useLocation().pathname === '/timer';
 
-  const weekFocusSeconds = useMemo(() => computeCurrentWeekFocusSeconds(sessions), [sessions]);
+  const today = useToday();
+  const weekFocusSeconds = useMemo(
+    () => computeCurrentWeekFocusSeconds(sessions),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recompute when the day changes
+    [sessions, today]
+  );
   const goalHours = settings.weekly_goal_hours;
   const goalPct = goalHours > 0 ? Math.min((weekFocusSeconds / 3600 / goalHours) * 100, 100) : 0;
   const isDark = resolveTheme(theme) === 'dark';

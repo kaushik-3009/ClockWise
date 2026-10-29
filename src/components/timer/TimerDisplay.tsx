@@ -18,7 +18,7 @@ const rad = (deg: number) => ((deg - 90) * Math.PI) / 180;
 // Scales with the smaller of width and height so the dial fits phones in both
 // orientations without pushing the controls off-screen.
 const DIAL_SIZE =
-  'h-[min(68vw,38dvh,440px)] w-[min(68vw,38dvh,440px)] [@media(max-height:500px)]:h-[52dvh] [@media(max-height:500px)]:w-[52dvh]';
+  'h-[min(68vw,32dvh,440px)] w-[min(68vw,32dvh,440px)] [@media(max-height:500px)]:h-[34dvh] [@media(max-height:500px)]:w-[34dvh]';
 
 function Hand({
   deg,

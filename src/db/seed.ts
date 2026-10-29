@@ -314,6 +314,9 @@ export async function seedNewUser(userId: string, includeDemoData = false): Prom
   await seedDefaultsOnly(userId);
 }
 
+/** Accounts being deleted; never re-seeded for the rest of this page load. */
+const deletingUsers = new Set<string>();
+
 /**
  * Make sure the account has the stock templates and a settings document.
  * Only ever creates missing things — it never deletes or overwrites, so a
@@ -321,6 +324,9 @@ export async function seedNewUser(userId: string, includeDemoData = false): Prom
  * are always safe.
  */
 export async function seedDefaultsOnly(userId: string): Promise<void> {
+  // The settings listener calls this when it sees the settings doc vanish, which
+  // is exactly what happens while an account is being deleted.
+  if (deletingUsers.has(userId)) return;
   const db = getFirebaseFirestore();
   const templatesCol = collection(db, 'users', userId, 'templates');
   const settingsRef = doc(db, 'users', userId, 'settings', 'default');
@@ -345,7 +351,7 @@ export async function seedDefaultsOnly(userId: string): Promise<void> {
     writes++;
   }
 
-  if (writes > 0) await batch.commit();
+  if (writes > 0 && !deletingUsers.has(userId)) await batch.commit();
 }
 
 export async function clearUserData(userId: string): Promise<void> {
@@ -362,6 +368,7 @@ export async function clearUserData(userId: string): Promise<void> {
 
 /** Delete every document the user owns (used when deleting the account). */
 export async function deleteAllUserData(userId: string): Promise<void> {
+  deletingUsers.add(userId);
   const db = getFirebaseFirestore();
   const collections = [
     'projects',

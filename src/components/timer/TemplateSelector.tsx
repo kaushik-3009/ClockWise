@@ -18,6 +18,11 @@ export function TemplateSelector({ className }: TemplateSelectorProps) {
   const { settings, saveSettings } = useSettings();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const close = (returnFocus: boolean) => {
+    setOpen(false);
+    if (returnFocus) triggerRef.current?.focus();
+  };
 
   // Close on outside click / Escape.
   useEffect(() => {
@@ -29,6 +34,7 @@ export function TemplateSelector({ className }: TemplateSelectorProps) {
       if (e.key === 'Escape') {
         e.preventDefault();
         setOpen(false);
+        triggerRef.current?.focus();
       }
     };
     document.addEventListener('pointerdown', onDown);
@@ -53,15 +59,15 @@ export function TemplateSelector({ className }: TemplateSelectorProps) {
       long_break_after_n: template.long_break_after_n,
     });
     if (midSession) toast.info(`"${template.name}" will apply from your next session.`);
-    setOpen(false);
+    close(true);
   };
 
   return (
     <div ref={rootRef} className={cn('relative', className)}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen(!open)}
-        aria-haspopup="listbox"
         aria-expanded={open}
         className={cn(
           'inline-flex h-11 max-w-[70vw] items-center gap-2 rounded-full border px-4 text-sm font-medium transition-colors',
@@ -79,14 +85,16 @@ export function TemplateSelector({ className }: TemplateSelectorProps) {
       </button>
 
       {open && (
-        <div className="absolute left-1/2 top-full z-40 mt-1.5 w-64 -translate-x-1/2 rounded-lg border border-border-base bg-bg-card py-1 text-left shadow-elevated">
-          <ul role="listbox" aria-label="Timer templates">
+        <div className="absolute right-0 top-full z-40 mt-1.5 w-[min(16rem,calc(100vw-2rem))] rounded-lg border border-border-base bg-bg-card py-1 text-left shadow-elevated sm:left-1/2 sm:right-auto sm:-translate-x-1/2">
+          {/* A plain list of toggle buttons: simpler and better supported than an ARIA listbox. */}
+          <ul aria-label="Timer templates">
             {templates.map((template) => {
               const selected = activeTemplate?.id === template.id;
               return (
-                <li key={template.id} role="option" aria-selected={selected}>
+                <li key={template.id}>
                   <button
                     type="button"
+                    aria-pressed={selected}
                     onClick={() => handleSelect(template)}
                     className={cn(
                       'flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm transition-colors',

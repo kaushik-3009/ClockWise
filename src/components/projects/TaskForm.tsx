@@ -100,7 +100,7 @@ export function TaskForm({
             className="field"
           />
           {error && (
-            <p id={`${ids}-err`} className="text-xs text-error-text">
+            <p id={`${ids}-err`} role="alert" className="text-xs text-error-text">
               {error}
             </p>
           )}

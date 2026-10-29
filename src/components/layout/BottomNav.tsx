@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Timer,
@@ -29,7 +29,12 @@ function MiniTimer() {
   const remaining = useTimerStore((s) => s.remaining_seconds);
   const phase = useTimerStore((s) => s.phase_type);
   const location = useLocation();
-  if ((status !== 'running' && status !== 'paused') || location.pathname === '/timer') return null;
+  const visible = (status === 'running' || status === 'paused') && location.pathname !== '/timer';
+  useEffect(() => {
+    document.documentElement.classList.toggle('has-mini-timer', visible);
+    return () => document.documentElement.classList.remove('has-mini-timer');
+  }, [visible]);
+  if (!visible) return null;
   return (
     <NavLink
       to="/timer"

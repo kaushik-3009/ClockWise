@@ -24,6 +24,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { MusicPlayer } from '@/components/timer/MusicPlayer';
 import { PROJECT_COLORS } from '@/lib/constants';
 import { formatDuration } from '@/lib/time';
+import type { TimerStyle } from '@/types';
 
 const STATUS_ANNOUNCEMENT: Record<string, string> = {
   running: 'Timer running',
@@ -34,6 +35,32 @@ const STATUS_ANNOUNCEMENT: Record<string, string> = {
 
 const PHASE_NAME = { focus: 'Focus', short_break: 'Short break', long_break: 'Long break' };
 
+/**
+ * The only part of the page that changes every second, split out so each tick
+ * re-renders the dial rather than the whole page (dialogs, music player, ...).
+ */
+function LiveTimer({ timerStyle }: { timerStyle: TimerStyle }) {
+  const phaseType = useTimerStore((s) => s.phase_type);
+  const remaining = useTimerStore((s) => s.remaining_seconds);
+  const duration = useTimerStore((s) => s.phase_duration_seconds);
+  // The wall clock face is the only style that needs the current time.
+  const clockNow = useTimerStore((s) => (timerStyle === 'clock_numeric' ? s.clock_now : 0));
+  return (
+    <div
+      role="timer"
+      aria-label={`${PHASE_NAME[phaseType]}: ${formatDuration(remaining)} remaining`}
+      className="flex items-center justify-center py-1"
+    >
+      <TimerDisplay
+        remainingSeconds={remaining}
+        totalSeconds={duration}
+        timerStyle={timerStyle}
+        clockNow={clockNow}
+      />
+    </div>
+  );
+}
+
 export function TimerPage() {
   usePageTitle('Timer');
   const status = useTimerStore((s) => s.status);
@@ -41,9 +68,6 @@ export function TimerPage() {
   const phaseNumber = useTimerStore((s) => s.phase_number);
   const totalPhases = useTimerStore((s) => s.total_phases);
   const plan = useTimerStore((s) => s.plan);
-  const remaining = useTimerStore((s) => s.remaining_seconds);
-  const duration = useTimerStore((s) => s.phase_duration_seconds);
-  const clockNow = useTimerStore((s) => s.clock_now);
   const timerStyle = useTimerStore((s) => s.settings.timer_style);
   const shortcutsEnabled = useTimerStore((s) => s.settings.keyboard_shortcuts);
   const activeProjectId = useTimerStore((s) => s.active_project_id);
@@ -127,18 +151,7 @@ export function TimerPage() {
         </div>
 
         <div className="flex flex-col items-center gap-4 sm:gap-5 lg:gap-6 [@media(max-height:500px)]:gap-3">
-          <div
-            role="timer"
-            aria-label={`${PHASE_NAME[phaseType]}: ${formatDuration(remaining)} remaining`}
-            className="flex items-center justify-center py-1"
-          >
-            <TimerDisplay
-              remainingSeconds={remaining}
-              totalSeconds={duration}
-              timerStyle={timerStyle}
-              clockNow={clockNow}
-            />
-          </div>
+          <LiveTimer timerStyle={timerStyle} />
 
           {/* Announce state changes only — never the per-second countdown. */}
           <div aria-live="polite" aria-atomic="true" className="sr-only">

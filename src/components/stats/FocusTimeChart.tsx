@@ -33,7 +33,7 @@ export function FocusTimeChart({ data, highlightDay, subtitle, className }: Focu
 
   return (
     <div className={cn('bg-bg-card border border-border-base rounded-md p-5 px-6', className)}>
-      <h3 className="text-md font-semibold text-text-base">Focus time</h3>
+      <h2 className="text-md font-semibold text-text-base">Focus time</h2>
       <p className="text-xs text-text-sub mt-0.5 mb-4">{subtitle ?? 'Focus time per day'}</p>
       {data.length === 0 || data.every((d) => !d.focusSeconds) ? (
         <div className="flex items-center justify-center h-[220px] text-sm text-text-muted">

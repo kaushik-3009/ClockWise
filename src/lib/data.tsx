@@ -22,11 +22,17 @@ import { DEFAULT_SETTINGS } from '@/db/queries/settings';
 import { seedDefaultsOnly } from '@/db/seed';
 import { useTimerStore } from '@/stores/timerStore';
 import { toast } from '@/components/ui/Toast';
+import { brandShades } from '@/lib/color';
 import type { Project, Session, Task, TimerSettings, TimerTemplate } from '@/types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-/** Default window: a little over a year covers the heatmap, streaks and all stat periods. */
-const INITIAL_WINDOW_DAYS = 400;
+/**
+ * Sessions are read for a date window, not all time. The app starts with a short
+ * window (enough for the sidebar's weekly goal) so launching straight into the
+ * timer stays fast for long-time users; pages that chart history widen it via
+ * ensureSessionsSince (see useSessions).
+ */
+const INITIAL_WINDOW_DAYS = 35;
 
 function startOfDay(ms: number): number {
   const d = new Date(ms);
@@ -45,6 +51,9 @@ const INITIAL_LOADING = {
 let reloadOffered = false;
 
 function reportListenerError(source: string, err: FirestoreError) {
+  // Firestore is shut down on sign-out (possibly from another tab); listeners
+  // still attached at that moment fail harmlessly.
+  if (/terminated|shutting down/i.test(err.message)) return;
   console.error(`[data] ${source} listener failed:`, err);
   if (isFatalFirestoreError(err)) {
     if (!reloadOffered) {
@@ -99,7 +108,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   // Reset everything when the signed-in user changes (including sign-out), so
   // nothing from a previous account can leak into the next one.
-  useEffect(() => {
+  // This runs during render rather than in an effect so it lands before the
+  // pages' effects ask for a wider session window, instead of undoing them.
+  const [dataUid, setDataUid] = useState(uid);
+  if (dataUid !== uid) {
+    setDataUid(uid);
     setProjects([]);
     setTasks([]);
     setTemplates([]);
@@ -108,13 +121,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     setLoading(INITIAL_LOADING);
     setSessionsSince(startOfDay(Date.now() - INITIAL_WINDOW_DAYS * DAY_MS));
-  }, [uid]);
+  }
 
   useEffect(() => {
     if (!uid) return;
     const db = getFirebaseFirestore();
     const col = (name: string) => collection(db, 'users', uid, name);
-
     const unsubs = [
       onSnapshot(
         query(col('projects'), orderBy('created_at', 'desc')),
@@ -181,12 +193,26 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   // Apply the accent colour from settings.
   useEffect(() => {
-    document.documentElement.style.setProperty('--color-brand', settings.accent_color);
+    const root = document.documentElement.style;
+    root.setProperty('--color-brand', settings.accent_color);
+    const shades = brandShades(settings.accent_color);
+    root.setProperty('--brand-solid', shades.solid);
+    root.setProperty('--brand-text-light', shades.textOnLight);
+    root.setProperty('--brand-text-dark', shades.textOnDark);
   }, [settings.accent_color]);
 
   const loadOlderSessions = useCallback(() => {
     setLoading((l) => ({ ...l, sessions: true }));
     setSessionsSince((since) => startOfDay(since - 365 * DAY_MS));
+  }, []);
+
+  const ensureSessionsSince = useCallback((ms: number) => {
+    const target = startOfDay(ms);
+    setSessionsSince((since) => {
+      if (target >= since) return since;
+      setLoading((l) => ({ ...l, sessions: true }));
+      return target;
+    });
   }, []);
 
   const value = useMemo<DataContextValue>(
@@ -200,6 +226,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       error,
       sessionsSince,
       loadOlderSessions,
+      ensureSessionsSince,
     }),
     [
       projects,
@@ -211,6 +238,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       error,
       sessionsSince,
       loadOlderSessions,
+      ensureSessionsSince,
     ]
   );
 

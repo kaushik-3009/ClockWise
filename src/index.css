@@ -10,8 +10,8 @@
   --color-brand-alpha: color-mix(in srgb, var(--color-brand) 15%, transparent);
   /* Darker shade for white-on-brand fills and brand-coloured text: the raw accent
      (#E8521A) only reaches 3.7:1 against white, below WCAG AA for text. */
-  --color-brand-solid: color-mix(in srgb, var(--color-brand) 76%, black);
-  --color-brand-text: color-mix(in srgb, var(--color-brand) 76%, black);
+  --color-brand-solid: var(--brand-solid, color-mix(in srgb, var(--color-brand) 76%, black));
+  --color-brand-text: var(--brand-text-light, color-mix(in srgb, var(--color-brand) 76%, black));
 
   /* ── Backgrounds ──────────────────────── */
   --bg-primary: #ffffff;
@@ -107,7 +107,7 @@
   --text-primary: #f5f5f5;
   --text-secondary: #bbbbbb;
   --text-muted: #a3a3a3;
-  --color-brand-text: color-mix(in srgb, var(--color-brand) 70%, white);
+  --color-brand-text: var(--brand-text-dark, color-mix(in srgb, var(--color-brand) 70%, white));
   --color-success-text: #6ee7a0;
   --color-warning-text: #fbbf24;
   --color-error-text: #fca5a5;
@@ -149,6 +149,8 @@ html {
 
 body {
   overscroll-behavior: none;
+  /* Long unbroken names (URLs, IDs, "AAAA…") wrap instead of widening layouts. */
+  overflow-wrap: anywhere;
   background-color: var(--bg-primary);
   color: var(--text-primary);
   font-family: 'Manrope', system-ui, sans-serif;
@@ -160,13 +162,13 @@ body {
 
 /* Keyboard focus is always visible; mouse/touch focus stays quiet. */
 :focus-visible {
-  outline: 2px solid var(--color-brand-solid);
+  outline: 2px solid var(--color-brand-text);
   outline-offset: 2px;
 }
 
 /* iOS zooms the page when focusing a field with text smaller than 16px, and the
    installed app stays zoomed. Keep every form control at 16px on touch-size screens. */
-@media (max-width: 1023px) {
+@media (max-width: 1023px), (pointer: coarse) {
   input,
   select,
   textarea {
@@ -190,6 +192,9 @@ body {
 .toast-region {
   bottom: calc(76px + env(safe-area-inset-bottom));
 }
+html.has-mini-timer .toast-region {
+  bottom: calc(128px + env(safe-area-inset-bottom));
+}
 @media (min-width: 1024px) {
   .toast-region {
     bottom: auto;
@@ -197,11 +202,19 @@ body {
   }
 }
 
-/* Keep a form's submit button visible while a tall dialog scrolls (landscape phones). */
-.modal-panel form > button[type='submit']:last-child {
-  position: sticky;
-  bottom: 0;
-  box-shadow: 0 -12px 12px -4px var(--bg-card);
+/* Keep a form's submit button visible while a tall dialog scrolls (landscape phones).
+   Not on very short viewports (keyboard open in landscape), where it would cover
+   the field being typed in. */
+@media (min-height: 320px) {
+  .modal-panel form > button[type='submit']:last-child {
+    position: sticky;
+    bottom: 0;
+    box-shadow: 0 -12px 12px -4px var(--bg-card);
+  }
+  .modal-panel form > button[type='submit']:last-child:disabled {
+    opacity: 1;
+    background-color: color-mix(in srgb, var(--color-brand-solid) 45%, var(--bg-card));
+  }
 }
 
 /* Modals: a bottom sheet on phones that clears the home indicator, never taller

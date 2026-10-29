@@ -163,41 +163,124 @@ export function downloadCSVExport(data: ExportData): void {
   );
 }
 
+/** Epoch-ms timestamps the security rules accept: whole ms, after 2000, at most a day ahead. */
+function validTimestamp(value: number | undefined, now: number): value is number {
+  return (
+    value !== undefined &&
+    Number.isInteger(value) &&
+    value > 946_684_800_000 &&
+    value < now + 86_400_000
+  );
+}
+
+const optionalRef = (id: string | undefined) => (id && id.length <= 128 ? id : undefined);
+
+/** Last occurrence wins, like writing the file's records in order would. */
+function dedupe<T extends { id: string }>(items: T[]): T[] {
+  return [...new Map(items.map((item) => [item.id, item])).values()];
+}
+
 /**
  * Write a validated export into the user's account. Documents keep their ids,
  * so re-running an import (e.g. after a network failure part-way) is idempotent.
+ *
+ * Records are brought in line with the security rules first, since one rejected
+ * write fails its whole batch: timestamps are repaired or the record skipped, and
+ * documents that already exist (like the stock templates every account has) keep
+ * their original created_at, which the rules don't allow to change.
  */
 export async function importData(userId: string, raw: unknown): Promise<ImportSummary> {
-  const { data, skipped } = validateExportData(raw);
+  const { data, skipped: invalid } = validateExportData(raw);
+  let skipped = invalid;
   const db = getFirebaseFirestore();
   const col = (name: string) => collection(db, 'users', userId, name);
-  const withUser = <T extends { user_id: string }>(item: T): T =>
-    stripUndefined({ ...item, user_id: userId });
+  const now = Date.now();
+
+  const existingCreatedAt = async (name: string) => {
+    const snap = await getDocs(col(name));
+    return new Map(snap.docs.map((d) => [d.id, d.data().created_at as unknown]));
+  };
+  const [existingProjects, existingTasks, existingTemplates] = await Promise.all([
+    existingCreatedAt('projects'),
+    existingCreatedAt('tasks'),
+    existingCreatedAt('templates'),
+  ]);
+  const createdAt = (existing: Map<string, unknown>, id: string, value: number) => {
+    if (existing.has(id)) return existing.get(id) as number;
+    return validTimestamp(value, now) ? value : now;
+  };
+
+  const projects = dedupe(data.projects).map((p) => ({
+    ...p,
+    user_id: userId,
+    created_at: createdAt(existingProjects, p.id, p.created_at),
+  }));
+  const tasks = dedupe(data.tasks).map((t) => ({
+    ...t,
+    user_id: userId,
+    project_id: optionalRef(t.project_id),
+    created_at: createdAt(existingTasks, t.id, t.created_at),
+  }));
+  const templates = dedupe(data.templates ?? []).map((t: TimerTemplate) => ({
+    ...t,
+    user_id: userId,
+    created_at: createdAt(existingTemplates, t.id, Math.round(t.created_at)),
+  }));
+  const sessions = dedupe(data.sessions).flatMap((s): Session[] => {
+    const started_at = Math.round(s.started_at);
+    if (!validTimestamp(started_at, now)) {
+      skipped++;
+      return [];
+    }
+    const ended = s.ended_at === undefined ? undefined : Math.round(s.ended_at);
+    return [
+      {
+        ...s,
+        user_id: userId,
+        project_id: optionalRef(s.project_id),
+        task_id: optionalRef(s.task_id),
+        started_at,
+        ended_at: validTimestamp(ended, now) && ended >= started_at ? ended : undefined,
+      },
+    ];
+  });
 
   const ops: Array<{ ref: ReturnType<typeof doc>; data: object }> = [];
-  data.projects.forEach((p) => ops.push({ ref: doc(col('projects'), p.id), data: withUser(p) }));
-  data.tasks.forEach((t) => ops.push({ ref: doc(col('tasks'), t.id), data: withUser(t) }));
-  data.sessions.forEach((s) => ops.push({ ref: doc(col('sessions'), s.id), data: withUser(s) }));
-  (data.templates ?? []).forEach((t: TimerTemplate) =>
-    ops.push({ ref: doc(col('templates'), t.id), data: withUser(t) })
-  );
+  projects.forEach((p) => ops.push({ ref: doc(col('projects'), p.id), data: stripUndefined(p) }));
+  tasks.forEach((t) => ops.push({ ref: doc(col('tasks'), t.id), data: stripUndefined(t) }));
+  sessions.forEach((s) => ops.push({ ref: doc(col('sessions'), s.id), data: stripUndefined(s) }));
+  templates.forEach((t) => ops.push({ ref: doc(col('templates'), t.id), data: stripUndefined(t) }));
 
   const BATCH_LIMIT = 450;
-  for (let i = 0; i < ops.length; i += BATCH_LIMIT) {
-    const batch = writeBatch(db);
-    ops.slice(i, i + BATCH_LIMIT).forEach((op) => batch.set(op.ref, op.data));
-    await batch.commit();
-  }
-
-  if (data.settings) {
-    await setDoc(doc(db, 'users', userId, 'settings', 'default'), data.settings);
+  let written = 0;
+  try {
+    if (data.settings) {
+      await setDoc(doc(db, 'users', userId, 'settings', 'default'), data.settings);
+    }
+    for (let i = 0; i < ops.length; i += BATCH_LIMIT) {
+      const chunk = ops.slice(i, i + BATCH_LIMIT);
+      const batch = writeBatch(db);
+      chunk.forEach((op) => batch.set(op.ref, op.data));
+      await batch.commit();
+      written += chunk.length;
+    }
+  } catch (err) {
+    console.error('[import] Write failed:', err);
+    const code = (err as { code?: string }).code;
+    const reason =
+      code === 'permission-denied'
+        ? 'some records were rejected as invalid'
+        : 'the connection was interrupted';
+    throw new Error(
+      `${reason}. ${written} of ${ops.length} records were saved; importing the same file again is safe.`
+    );
   }
 
   return {
-    projects: data.projects.length,
-    tasks: data.tasks.length,
-    sessions: data.sessions.length,
-    templates: data.templates?.length ?? 0,
+    projects: projects.length,
+    tasks: tasks.length,
+    sessions: sessions.length,
+    templates: templates.length,
     skipped,
   };
 }

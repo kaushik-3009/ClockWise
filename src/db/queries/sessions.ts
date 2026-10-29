@@ -37,6 +37,18 @@ export async function getSessionsInRange(
   return snapshot.docs.flatMap((d) => parseSession(d.id, d.data()) ?? []);
 }
 
+const INTEGER_FIELDS = ['started_at', 'ended_at', 'duration_seconds', 'phase_number'] as const;
+
+/** The security rules require whole numbers; fractional minutes from a form would otherwise fail the write. */
+function wholeNumbers<T extends Partial<Session>>(data: T): T {
+  const out = { ...data };
+  for (const key of INTEGER_FIELDS) {
+    const value = out[key];
+    if (typeof value === 'number') (out as Record<string, unknown>)[key] = Math.round(value);
+  }
+  return out;
+}
+
 export function createSession(
   userId: string,
   data: Omit<Session, 'id' | 'user_id'>,
@@ -44,7 +56,7 @@ export function createSession(
   id: string = crypto.randomUUID()
 ): { session: Session; written: Promise<void> } {
   const session: Session = stripUndefined({
-    ...data,
+    ...wholeNumbers(data),
     user_id: userId,
     id,
   });
@@ -56,7 +68,7 @@ export async function updateSession(
   id: string,
   changes: Partial<Omit<Session, 'id' | 'user_id'>>
 ): Promise<void> {
-  await updateDoc(sessionRef(userId, id), toUpdate(changes));
+  await updateDoc(sessionRef(userId, id), toUpdate(wholeNumbers(changes)));
 }
 
 export async function deleteSession(userId: string, id: string): Promise<void> {

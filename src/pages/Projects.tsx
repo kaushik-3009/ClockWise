@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { rovingKeyDown } from '@/lib/roving';
 import { useNavigate } from 'react-router-dom';
 import { Plus, FolderOpen, ClipboardList, Archive } from 'lucide-react';
 import { useProjects } from '@/hooks/useProjects';
@@ -157,6 +158,8 @@ export function ProjectsPage() {
             type="button"
             role="tab"
             aria-selected={activeTab === tab.id}
+            tabIndex={activeTab === tab.id ? 0 : -1}
+            onKeyDown={rovingKeyDown}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
               '-mb-px min-h-11 shrink-0 border-b-2 px-4 text-sm font-medium transition-colors duration-fast',
